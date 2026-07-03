@@ -15,5 +15,4 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-apps/backend/generated/
-apps/backend/src/prisma/generated/
+apps/backend/src/generated/
