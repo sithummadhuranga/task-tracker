@@ -19,6 +19,12 @@ export const baseConfig = tseslint.config(
     },
   },
   {
+    // Config files (eslint.config.mjs, vite.config.ts, ...) sit outside every tsconfig's
+    // "include", so they can never be type-checked — only plain syntax-level linting applies.
+    files: ["**/*.config.mjs", "**/*.config.ts"],
+    ...tseslint.configs.disableTypeChecked,
+  },
+  {
     ignores: ["**/dist/**", "**/coverage/**", "**/.turbo/**", "**/node_modules/**"],
   },
 );
