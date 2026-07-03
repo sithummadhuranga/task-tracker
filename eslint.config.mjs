@@ -13,15 +13,19 @@ export const baseConfig = tseslint.config(
   eslintConfigPrettier,
   {
     rules: {
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+      ],
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
     },
   },
   {
-    // Config files (eslint.config.mjs, vite.config.ts, ...) sit outside every tsconfig's
-    // "include", so they can never be type-checked — only plain syntax-level linting applies.
-    files: ["**/*.config.mjs", "**/*.config.ts"],
+    // Config files and plain JS sit outside every tsconfig's "include" (no allowJs), so they
+    // can never be type-checked — only plain syntax-level linting applies to them.
+    files: ["**/*.config.mjs", "**/*.config.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
     ...tseslint.configs.disableTypeChecked,
   },
   {

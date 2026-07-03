@@ -1,0 +1,6 @@
+import { AppError } from "./app-error.js";
+
+export class ForbiddenError extends AppError {
+  readonly statusCode = 403;
+  readonly error = "Forbidden";
+}

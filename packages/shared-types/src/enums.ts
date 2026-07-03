@@ -1,7 +1,7 @@
 export const TASK_STATUSES = ["TODO", "IN_PROGRESS", "DONE"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-// Exhaustive, code-defined catalog per docs/FEATURES_AND_API.md §1 — not admin-creatable.
+// Exhaustive, code-defined catalog — not admin-creatable, only assignable to roles/users.
 export const PERMISSION_KEYS = [
   "task:create",
   "task:read:own",
