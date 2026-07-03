@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PERMISSION_KEYS, TASK_STATUSES, PERMISSION_EFFECTS } from "./enums.js";
 
-// This catalog is LOCKED per docs/FEATURES_AND_API.md §1 — any accidental addition, removal,
-// or typo here silently changes the RBAC surface every other module builds on.
+// This catalog is locked for v1 — any accidental addition, removal, or typo here silently
+// changes the RBAC surface every other module builds on.
 describe("permission catalog", () => {
   it("matches the exact, locked v1 catalog", () => {
     expect(PERMISSION_KEYS).toEqual([
