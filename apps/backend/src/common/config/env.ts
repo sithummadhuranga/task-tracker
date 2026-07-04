@@ -6,6 +6,7 @@ const envSchema = z.object({
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   CORS_ORIGIN: z.url(),
+  JWT_ACCESS_SECRET: z.string().min(32),
 });
 
 export function parseEnv(rawEnv: NodeJS.ProcessEnv) {
