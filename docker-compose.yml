@@ -70,7 +70,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-5173}:4173"
+      - "${FRONTEND_PORT:-5173}:80"
 
 volumes:
   postgres-data:
