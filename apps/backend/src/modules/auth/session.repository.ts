@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
+import type { Redis } from "ioredis";
 import { redisClient } from "../../common/redis/client.js";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export type SessionRedisClient = Pick<Redis, "get" | "set" | "sadd" | "srem" | "del" | "smembers">;
 
 function sessionKey(token: string): string {
   return `session:${token}`;
@@ -33,12 +36,14 @@ export interface SessionRepository {
 }
 
 export class RedisSessionRepository implements SessionRepository {
+  constructor(private readonly redis: SessionRedisClient = redisClient) {}
+
   async createSession(userId: string): Promise<string> {
     const token = generateToken();
     const value: SessionValue = { userId, status: "active" };
 
-    await redisClient.set(sessionKey(token), JSON.stringify(value), "EX", SESSION_TTL_SECONDS);
-    await redisClient.sadd(userSessionsKey(userId), token);
+    await this.redis.set(sessionKey(token), JSON.stringify(value), "EX", SESSION_TTL_SECONDS);
+    await this.redis.sadd(userSessionsKey(userId), token);
 
     return token;
   }
@@ -50,7 +55,7 @@ export class RedisSessionRepository implements SessionRepository {
   // that token is indistinguishable from garbage input — an unavoidable limit of a Redis
   // key-per-token model, not a gap in the detection logic itself.
   async rotateSession(oldToken: string): Promise<RotateResult> {
-    const raw = await redisClient.get(sessionKey(oldToken));
+    const raw = await this.redis.get(sessionKey(oldToken));
 
     if (!raw) {
       return { status: "not_found" };
@@ -64,8 +69,8 @@ export class RedisSessionRepository implements SessionRepository {
     }
 
     const tombstone: SessionValue = { userId: parsed.userId, status: "rotated" };
-    await redisClient.set(sessionKey(oldToken), JSON.stringify(tombstone), "KEEPTTL");
-    await redisClient.srem(userSessionsKey(parsed.userId), oldToken);
+    await this.redis.set(sessionKey(oldToken), JSON.stringify(tombstone), "KEEPTTL");
+    await this.redis.srem(userSessionsKey(parsed.userId), oldToken);
 
     const newToken = await this.createSession(parsed.userId);
 
@@ -73,17 +78,17 @@ export class RedisSessionRepository implements SessionRepository {
   }
 
   async revokeSession(token: string, userId: string): Promise<void> {
-    await redisClient.del(sessionKey(token));
-    await redisClient.srem(userSessionsKey(userId), token);
+    await this.redis.del(sessionKey(token));
+    await this.redis.srem(userSessionsKey(userId), token);
   }
 
   async revokeAllSessions(userId: string): Promise<void> {
-    const tokens = await redisClient.smembers(userSessionsKey(userId));
+    const tokens = await this.redis.smembers(userSessionsKey(userId));
 
     if (tokens.length > 0) {
-      await redisClient.del(...tokens.map(sessionKey));
+      await this.redis.del(...tokens.map(sessionKey));
     }
 
-    await redisClient.del(userSessionsKey(userId));
+    await this.redis.del(userSessionsKey(userId));
   }
 }
