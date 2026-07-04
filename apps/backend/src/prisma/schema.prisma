@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles               UserRole[]
+  permissionOverrides UserPermission[]
+  tasks               Task[]
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+// Fixed, code-defined catalog, seeded read-only — not admin-creatable via API. Stored here
+// only so RolePermission/UserPermission can reference a permission by FK.
+model Permission {
+  id  String @id @default(uuid())
+  key String @unique
+
+  roles         RolePermission[]
+  userOverrides UserPermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model UserPermission {
+  id           String           @id @default(uuid())
+  userId       String
+  permissionId String
+  effect       PermissionEffect
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  dueDate     DateTime
+  ownerId     String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([status])
+}

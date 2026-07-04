@@ -29,7 +29,7 @@ export const baseConfig = tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/.turbo/**", "**/node_modules/**"],
+    ignores: ["**/dist/**", "**/coverage/**", "**/.turbo/**", "**/node_modules/**", "**/generated/**"],
   },
 );
 
