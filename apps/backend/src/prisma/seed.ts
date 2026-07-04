@@ -1,7 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { PERMISSION_KEYS } from "@task-tracker/shared-types";
 import { prisma } from "./client.js";
 
-const USER_ROLE_PERMISSIONS = [
+export const USER_ROLE_PERMISSIONS = [
   "task:create",
   "task:read:own",
   "task:update:own",
@@ -39,17 +40,23 @@ async function seedRole(name: string, isSystem: boolean, permissionKeys: readonl
   return role;
 }
 
-async function main() {
+export async function main() {
   await seedPermissionCatalog();
   await seedRole("USER", true, USER_ROLE_PERMISSIONS);
   await seedRole("ADMIN", true, PERMISSION_KEYS);
 }
 
-main()
-  .catch((error: unknown) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    void prisma.$disconnect();
-  });
+// Only run when executed directly (`tsx src/prisma/seed.ts` / `prisma db seed`) — importing
+// this module for tests must not trigger a live seed run as a side effect.
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  main()
+    .catch((error: unknown) => {
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      void prisma.$disconnect();
+    });
+}
