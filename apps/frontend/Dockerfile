@@ -11,6 +11,9 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY packages/shared-types packages/shared-types
 COPY apps/frontend apps/frontend
+# shared-types ships compiled JS (see its package.json "exports") — build it before anything
+# that imports from it, even though Vite itself would otherwise happily bundle raw TS.
+RUN pnpm --filter @task-tracker/shared-types run build
 WORKDIR /app/apps/frontend
 RUN pnpm run build
 

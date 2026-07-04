@@ -95,6 +95,10 @@ model Task {
 
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  @@index([ownerId])
-  @@index([status])
+  // Every list query sorts by createdAt DESC and optionally filters by ownerId and/or status —
+  // these match the three real query shapes (owner-scoped, status-scoped, unfiltered) rather
+  // than indexing each column independently.
+  @@index([ownerId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
 }

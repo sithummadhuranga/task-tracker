@@ -126,7 +126,8 @@ sensitive lives in GitHub Environment secrets and is substituted into the Digita
    (classic) → generate one scoped to `read:packages` — DigitalOcean needs this to pull the
    (public) image.
 5. **This repo** → Settings → Environments → create `staging` and `production`, each with:
-   - Secrets: `DATABASE_URL`, `REDIS_URL`
+   - Secrets: `DATABASE_URL`, `REDIS_URL`, `JWT_ACCESS_SECRET` (generate a distinct value per
+     environment, e.g. `openssl rand -base64 48` — never reuse the placeholder in `.env.example`)
    - Variable: `CORS_ORIGIN` (the environment's Vercel URL)
    - Repo-level secrets (not environment-scoped): `DIGITALOCEAN_ACCESS_TOKEN`, `GHCR_PAT`
 6. **Vercel**: import the repo once, Root Directory `apps/frontend`, framework Vite. Add

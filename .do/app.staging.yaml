@@ -29,6 +29,9 @@ services:
       - key: REDIS_URL
         value: ${REDIS_URL}
         type: SECRET
+      - key: JWT_ACCESS_SECRET
+        value: ${JWT_ACCESS_SECRET}
+        type: SECRET
       - key: CORS_ORIGIN
         value: ${CORS_ORIGIN}
         type: GENERAL

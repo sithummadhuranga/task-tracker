@@ -1,8 +1,17 @@
 import type { Redis } from "ioredis";
 import { redisClient } from "../../common/redis/client.js";
-import { PrismaPermissionsRepository, type PermissionsRepository } from "./permissions.repository.js";
+import {
+  PrismaPermissionsRepository,
+  type PermissionsRepository,
+} from "./permissions.repository.js";
 
 const CACHE_TTL_SECONDS = 60;
+
+// Not a valid permission key (real ones are always "resource:action" or "resource:action:scope"),
+// so it can never collide with a real value — used to let a genuinely-empty result still occupy
+// a Redis Set (an empty Set has no key at all, which would otherwise be indistinguishable from a
+// cache miss and force every request for a zero-permission user to hit Postgres).
+const EMPTY_RESULT_SENTINEL = "__EMPTY__";
 
 export type PermissionsRedisClient = Pick<Redis, "smembers" | "sadd" | "expire" | "del">;
 
@@ -21,15 +30,13 @@ export class PermissionsService {
   ) {}
 
   // Effective permissions = union(role permissions) + direct GRANT - direct DENY, DENY always
-  // wins. A Redis Set can't represent a cached-but-empty result (an empty set has no key), so
-  // a user whose effective permissions are genuinely empty never hits the cache — every
-  // request recomputes from Postgres for that edge case, which is correct, just uncached.
+  // wins.
   async resolveEffectivePermissions(userId: string): Promise<string[]> {
     const key = cacheKey(userId);
     const cached = await this.redis.smembers(key);
 
     if (cached.length > 0) {
-      return cached;
+      return cached.includes(EMPTY_RESULT_SENTINEL) ? [] : cached;
     }
 
     const { roleKeys, overrides } = await this.repository.getPermissionSources(userId);
@@ -48,10 +55,8 @@ export class PermissionsService {
 
     const result = [...effective];
 
-    if (result.length > 0) {
-      await this.redis.sadd(key, ...result);
-      await this.redis.expire(key, CACHE_TTL_SECONDS);
-    }
+    await this.redis.sadd(key, ...(result.length > 0 ? result : [EMPTY_RESULT_SENTINEL]));
+    await this.redis.expire(key, CACHE_TTL_SECONDS);
 
     return result;
   }

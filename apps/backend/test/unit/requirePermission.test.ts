@@ -21,7 +21,9 @@ describe("requirePermission", () => {
   });
 
   it("throws ForbiddenError when the caller holds none of the required keys", async () => {
-    jest.spyOn(permissionsService, "resolveEffectivePermissions").mockResolvedValue(["task:create"]);
+    jest
+      .spyOn(permissionsService, "resolveEffectivePermissions")
+      .mockResolvedValue(["task:create"]);
     const req = { user: { id: "user-1" } } as Request;
     const middleware = requirePermission("role:manage", "user:manage");
 

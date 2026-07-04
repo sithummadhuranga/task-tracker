@@ -113,7 +113,7 @@ describe("PermissionsService.resolveEffectivePermissions", () => {
     expect(redis.expire).toHaveBeenCalledWith("permissions:user-1", 60);
   });
 
-  it("does not attempt to cache an empty result (a Redis Set can't represent one)", async () => {
+  it("caches a genuinely-empty result via a sentinel, so a zero-permission user still hits the cache", async () => {
     const { repository } = createRepository({ roleKeys: [], overrides: [] });
     const redis = createRedis();
     const service = new PermissionsService(repository, redis);
@@ -121,8 +121,18 @@ describe("PermissionsService.resolveEffectivePermissions", () => {
     const result = await service.resolveEffectivePermissions("user-1");
 
     expect(result).toEqual([]);
-    expect(redis.sadd).not.toHaveBeenCalled();
-    expect(redis.expire).not.toHaveBeenCalled();
+    expect(redis.sadd).toHaveBeenCalledWith("permissions:user-1", "__EMPTY__");
+    expect(redis.expire).toHaveBeenCalledWith("permissions:user-1", 60);
+  });
+
+  it("returns [] (not the sentinel) when the cached result is the empty marker", async () => {
+    const { repository } = createRepository({ roleKeys: ["task:create"], overrides: [] });
+    const redis = createRedis(["__EMPTY__"]);
+    const service = new PermissionsService(repository, redis);
+
+    const result = await service.resolveEffectivePermissions("user-1");
+
+    expect(result).toEqual([]);
   });
 });
 

@@ -128,6 +128,7 @@ jobs:
           GHCR_CREDENTIALS: ${{ github.actor }}:${{ secrets.GHCR_PAT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
@@ -186,6 +187,7 @@ jobs:
           GHCR_CREDENTIALS: ${{ github.actor }}:${{ secrets.GHCR_PAT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
