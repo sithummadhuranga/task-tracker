@@ -1,0 +1,34 @@
+name: task-tracker-backend-staging
+region: nyc
+
+services:
+  - name: backend
+    # No GitHub source — DO never reads this repo directly. CI builds the image and pushes it
+    # to GitHub Container Registry (public package, free); App Platform only pulls from there.
+    image:
+      registry_type: GHCR
+      registry: sithummadhuranga
+      repository: task-tracker-backend-staging
+      digest: ${IMAGE_DIGEST}
+      registry_credentials: ${GHCR_CREDENTIALS}
+    http_port: 4000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: NODE_ENV
+        value: production
+        type: GENERAL
+      - key: PORT
+        value: "4000"
+        type: GENERAL
+      # DATABASE_URL / REDIS_URL are substituted from GitHub Actions secrets at deploy time
+      # (see .github/workflows/ci.yml) — no real value is ever committed to this file.
+      - key: DATABASE_URL
+        value: ${DATABASE_URL}
+        type: SECRET
+      - key: REDIS_URL
+        value: ${REDIS_URL}
+        type: SECRET
+      - key: CORS_ORIGIN
+        value: ${CORS_ORIGIN}
+        type: GENERAL
