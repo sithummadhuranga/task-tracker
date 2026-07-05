@@ -1,6 +1,6 @@
 import { registerSchema } from "@task-tracker/shared-types";
 import { describe, expect, it } from "vitest";
-import { zodFieldErrors } from "./zodFieldErrors";
+import { zodFieldErrors } from "../../src/lib/zodFieldErrors";
 
 describe("zodFieldErrors", () => {
   it("maps every failing field to a message", () => {

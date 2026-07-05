@@ -8,3 +8,9 @@
 .github
 .vscode
 **/*.log
+
+# Local secrets must never enter a build context — without this, COPY steps in the
+# Dockerfiles bake whatever .env happens to exist on the host straight into the image layers.
+**/.env
+**/.env.*
+!**/.env.example

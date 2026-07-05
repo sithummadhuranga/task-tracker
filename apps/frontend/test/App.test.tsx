@@ -2,16 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
-import { AuthProvider } from "./features/auth/AuthContext";
+import { App } from "../src/App";
+import { AuthProvider } from "../src/features/auth/AuthContext";
 
 const { refreshAccessTokenMock, apiClientMock } = vi.hoisted(() => ({
   refreshAccessTokenMock: vi.fn(),
   apiClientMock: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("./lib/apiClient", async () => {
-  const actual = await vi.importActual<typeof import("./lib/apiClient")>("./lib/apiClient");
+vi.mock("../src/lib/apiClient", async () => {
+  const actual = await vi.importActual<typeof import("../src/lib/apiClient")>("../src/lib/apiClient");
   return { ...actual, apiClient: apiClientMock, refreshAccessToken: refreshAccessTokenMock };
 });
 
@@ -37,7 +37,7 @@ describe("App routing", () => {
     refreshAccessTokenMock.mockResolvedValue(false);
     renderAt("/");
 
-    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
 
   it("renders the home page at / once a session is restored", async () => {
@@ -50,7 +50,7 @@ describe("App routing", () => {
 
     renderAt("/");
 
-    expect(await screen.findByRole("heading", { name: "Task Tracker" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Your tasks" })).toBeInTheDocument();
   });
 
   it("renders the login page at /login", async () => {
@@ -58,7 +58,7 @@ describe("App routing", () => {
     renderAt("/login");
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument(),
+      expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument(),
     );
   });
 
@@ -67,7 +67,7 @@ describe("App routing", () => {
     renderAt("/register");
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "Create an account" })).toBeInTheDocument(),
+      expect(screen.getByRole("heading", { name: "Create your account" })).toBeInTheDocument(),
     );
   });
 });

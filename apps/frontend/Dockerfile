@@ -15,6 +15,10 @@ COPY apps/frontend apps/frontend
 # that imports from it, even though Vite itself would otherwise happily bundle raw TS.
 RUN pnpm --filter @task-tracker/shared-types run build
 WORKDIR /app/apps/frontend
+# Vite inlines import.meta.env.VITE_* into the compiled bundle at build time — there's no
+# server process at runtime to inject it later, so it must arrive as a build arg, not from a
+# .env file (which .dockerignore deliberately keeps out of the build context anyway).
+ARG VITE_API_URL
 RUN pnpm run build
 
 FROM nginx:alpine AS runtime

@@ -1,16 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "./AuthContext";
-import { RequireAuth } from "./RequireAuth";
+import { AuthProvider } from "../../../src/features/auth/AuthContext";
+import { RequireAuth } from "../../../src/features/auth/RequireAuth";
 
 const { refreshAccessTokenMock, apiClientMock } = vi.hoisted(() => ({
   refreshAccessTokenMock: vi.fn(),
   apiClientMock: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("../../lib/apiClient", async () => {
-  const actual = await vi.importActual<typeof import("../../lib/apiClient")>("../../lib/apiClient");
+vi.mock("../../../src/lib/apiClient", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../src/lib/apiClient")>("../../../src/lib/apiClient");
   return { ...actual, apiClient: apiClientMock, refreshAccessToken: refreshAccessTokenMock };
 });
 

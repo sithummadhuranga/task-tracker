@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasPermission } from "./permissions";
+import { hasPermission } from "../../src/lib/permissions";
 
 describe("hasPermission", () => {
   it("returns true when the granted list contains the required key", () => {

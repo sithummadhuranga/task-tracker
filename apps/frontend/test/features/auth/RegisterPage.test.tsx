@@ -2,18 +2,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../lib/apiClient";
-import { AuthProvider } from "./AuthContext";
-import { LoginPage } from "./LoginPage";
-import { RegisterPage } from "./RegisterPage";
+import { ApiError } from "../../../src/lib/apiClient";
+import { AuthProvider } from "../../../src/features/auth/AuthContext";
+import { LoginPage } from "../../../src/features/auth/LoginPage";
+import { RegisterPage } from "../../../src/features/auth/RegisterPage";
 
 const { refreshAccessTokenMock, apiClientMock } = vi.hoisted(() => ({
   refreshAccessTokenMock: vi.fn(),
   apiClientMock: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("../../lib/apiClient", async () => {
-  const actual = await vi.importActual<typeof import("../../lib/apiClient")>("../../lib/apiClient");
+vi.mock("../../../src/lib/apiClient", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../src/lib/apiClient")>("../../../src/lib/apiClient");
   return { ...actual, apiClient: apiClientMock, refreshAccessToken: refreshAccessTokenMock };
 });
 
@@ -48,7 +49,9 @@ describe("RegisterPage", () => {
   it("blocks submission and shows a field error for a password with no digit", async () => {
     refreshAccessTokenMock.mockResolvedValue(false);
     renderRegisterPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await fillAndSubmit(user, { name: "Ada", email: "ada@example.com", password: "onlyletters" });
@@ -61,7 +64,9 @@ describe("RegisterPage", () => {
     refreshAccessTokenMock.mockResolvedValue(false);
     apiClientMock.post.mockRejectedValue(new ApiError(409, "email already registered", null));
     renderRegisterPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await fillAndSubmit(user, { name: "Ada", email: "ada@example.com", password: "password1" });
@@ -80,12 +85,14 @@ describe("RegisterPage", () => {
     });
 
     renderRegisterPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await fillAndSubmit(user, { name: "Ada", email: "ada@example.com", password: "password1" });
 
-    expect(await screen.findByText("Welcome back")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByText(/account created/i)).toBeInTheDocument();
   });
 });

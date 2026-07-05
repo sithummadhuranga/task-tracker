@@ -2,12 +2,12 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../../common/config/env.js";
 import { ConflictError, UnauthorizedError } from "../../common/errors/index.js";
+import { BCRYPT_COST } from "../../common/security/password.js";
 import { permissionsService, type PermissionsService } from "../rbac/permissions.service.js";
 import { PrismaUsersRepository, type UsersRepository } from "../users/users.repository.js";
 import type { LoginInput, RegisterInput } from "./auth.dto.js";
 import { RedisSessionRepository, type SessionRepository } from "./session.repository.js";
 
-const BCRYPT_COST = 12;
 const ACCESS_TOKEN_TTL = "15m";
 
 export type PermissionsResolver = Pick<

@@ -16,3 +16,4 @@ pnpm-debug.log*
 Thumbs.db
 
 apps/backend/src/generated/
+.claude

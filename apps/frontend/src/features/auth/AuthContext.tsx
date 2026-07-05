@@ -41,15 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let isActive = true;
-
     async function restoreSession(): Promise<void> {
       // The access token only ever lives in memory, so a page reload always needs a fresh
       // one from the refresh_token cookie before /me can be called.
       const restored = await refreshAccessToken();
-      if (!isActive) {
-        return;
-      }
       if (!restored) {
         setState(UNAUTHENTICATED_STATE);
         return;
@@ -58,17 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await loadCurrentUser();
       } catch {
-        if (isActive) {
-          setState(UNAUTHENTICATED_STATE);
-        }
+        // React 18+ discards state updates from an unmounted component silently, so there's
+        // no unmounted-component guard here — it would just be dead defensiveness.
+        setState(UNAUTHENTICATED_STATE);
       }
     }
 
     void restoreSession();
-
-    return () => {
-      isActive = false;
-    };
   }, [loadCurrentUser]);
 
   const login = useCallback(
@@ -87,6 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await logoutUser();
+    } catch {
+      // Server-side session revocation is best-effort — local state is cleared unconditionally
+      // below, so a failed request here shouldn't surface as an uncaught rejection to callers.
     } finally {
       setAccessToken(null);
       setState(UNAUTHENTICATED_STATE);

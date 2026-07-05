@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
+    setupFiles: ["./test/setup.ts"],
+    // Explicit root, matching the backend's test/ convention — tests live in their own
+    // top-level directory, never co-located next to the source files they cover.
+    include: ["test/**/*.test.{ts,tsx}"],
   },
 });

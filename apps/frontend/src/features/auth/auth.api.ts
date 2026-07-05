@@ -31,8 +31,8 @@ export function loginUser(input: LoginInput): Promise<LoginResult> {
   return apiClient.post<LoginResult>("/api/auth/login", input);
 }
 
-export function logoutUser(): Promise<void> {
-  return apiClient.post<void>("/api/auth/logout");
+export async function logoutUser(): Promise<void> {
+  await apiClient.post("/api/auth/logout");
 }
 
 export function fetchCurrentUser(): Promise<MeResult> {

@@ -1,11 +1,13 @@
 import { registerSchema } from "@task-tracker/shared-types";
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ApiError } from "../../lib/apiClient";
 import { zodFieldErrors } from "../../lib/zodFieldErrors";
-import { AuthCard } from "./AuthCard";
+import { AuthLayout } from "./AuthLayout";
 import { useAuth } from "./AuthContext";
+import { FormBanner } from "./FormBanner";
 import { FormField } from "./FormField";
+import { SubmitButton } from "./SubmitButton";
 
 export function RegisterPage() {
   const { register, status } = useAuth();
@@ -22,7 +24,7 @@ export function RegisterPage() {
     return <Navigate to="/" replace />;
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
 
@@ -36,7 +38,7 @@ export function RegisterPage() {
 
     try {
       await register(result.data);
-      navigate("/login", { state: { justRegistered: true } });
+      await navigate("/login", { state: { justRegistered: true } });
     } catch (error) {
       setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     } finally {
@@ -45,8 +47,8 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthCard title="Create an account" subtitle="Start tracking your tasks in a minute.">
-      <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+    <AuthLayout heading="Create your account" description="Start tracking tasks in under a minute.">
+      <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)} noValidate>
         <FormField
           label="Name"
           value={name}
@@ -73,25 +75,16 @@ export function RegisterPage() {
           autoComplete="new-password"
           disabled={isSubmitting}
         />
-        {formError && (
-          <p role="alert" className="text-sm text-red-400">
-            {formError}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
-        >
-          {isSubmitting ? "Creating account..." : "Create account"}
-        </button>
+        {formError && <FormBanner tone="error">{formError}</FormBanner>}
+        <SubmitButton isSubmitting={isSubmitting} label="Create account" loadingLabel="Creating account..." />
       </form>
-      <p className="text-center text-sm text-slate-400">
+
+      <p className="mt-6 text-center text-sm text-muted">
         Already have an account?{" "}
-        <Link to="/login" className="font-medium text-indigo-400 hover:text-indigo-300">
+        <Link to="/login" className="font-medium text-primary hover:text-primary/80">
           Sign in
         </Link>
       </p>
-    </AuthCard>
+    </AuthLayout>
   );
 }

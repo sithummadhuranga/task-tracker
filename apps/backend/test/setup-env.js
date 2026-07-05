@@ -6,3 +6,5 @@ process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/task
 process.env.REDIS_URL ??= "redis://localhost:6379";
 process.env.CORS_ORIGIN ??= "http://localhost:5173";
 process.env.JWT_ACCESS_SECRET ??= "test-only-secret-value-not-used-in-production-00000000";
+process.env.ADMIN_SEED_EMAIL ??= "admin@test-tasktracker.local";
+process.env.ADMIN_SEED_PASSWORD ??= "test-only-admin-password-1";

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider, useAuth } from "./AuthContext";
+import { AuthProvider, useAuth } from "../../../src/features/auth/AuthContext";
 
 const { refreshAccessTokenMock, setAccessTokenMock, apiClientMock } = vi.hoisted(() => ({
   refreshAccessTokenMock: vi.fn(),
@@ -9,7 +9,7 @@ const { refreshAccessTokenMock, setAccessTokenMock, apiClientMock } = vi.hoisted
   apiClientMock: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("../../lib/apiClient", () => ({
+vi.mock("../../../src/lib/apiClient", () => ({
   apiClient: apiClientMock,
   refreshAccessToken: refreshAccessTokenMock,
   setAccessToken: setAccessTokenMock,

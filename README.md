@@ -42,18 +42,25 @@ Copy the example env files and fill in real values:
 ```bash
 cp .env.example .env                       # docker-compose (Postgres/Redis/ports)
 cp apps/backend/.env.example apps/backend/.env
+cp apps/frontend/.env.example apps/frontend/.env
 ```
 
-| Variable       | Used by | Notes                                   |
-| -------------- | ------- | --------------------------------------- |
-| `DATABASE_URL` | backend | PostgreSQL connection string            |
-| `REDIS_URL`    | backend | Redis connection string                 |
-| `CORS_ORIGIN`  | backend | Frontend origin allowed to call the API |
-| `NODE_ENV`     | backend | `development` \| `test` \| `production` |
-| `PORT`         | backend | Defaults to `4000`                      |
+| Variable              | Used by  | Notes                                                     |
+| --------------------- | -------- | ---------------------------------------------------------- |
+| `DATABASE_URL`        | backend  | PostgreSQL connection string                                |
+| `REDIS_URL`           | backend  | Redis connection string                                     |
+| `CORS_ORIGIN`         | backend  | Frontend origin allowed to call the API                      |
+| `NODE_ENV`            | backend  | `development` \| `test` \| `production`                      |
+| `PORT`                | backend  | Defaults to `4000`                                           |
+| `JWT_ACCESS_SECRET`   | backend  | Signs access tokens, min 32 chars — generate with `openssl rand -base64 48` |
+| `ADMIN_SEED_EMAIL`    | backend  | Email for the one seeded admin account, only read the first time that account is created |
+| `ADMIN_SEED_PASSWORD` | backend  | Password for the same seeded admin account, only read the first time that account is created |
+| `VITE_API_URL`        | frontend | Backend base URL. For local `vite dev`, read at dev-server start; for Docker, baked into the static bundle at `docker compose build` time via a build arg (see root `.env.example`) — Vite has no server process at runtime to read it later |
 
-The backend fails fast at boot with a clear error if any of these are missing or malformed
-(`src/common/config/env.ts`) — it will not silently start in a broken state.
+The backend fails fast at boot with a clear error if any of these (aside from
+`ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD`, which only the seed step reads, not the running
+server) are missing or malformed (`src/common/config/env.ts`) — it will not silently start in
+a broken state.
 
 ### 3. Database setup
 
@@ -70,8 +77,10 @@ pnpm --filter @task-tracker/backend run prisma:migrate
 pnpm --filter @task-tracker/backend run prisma:seed
 ```
 
-The seed is idempotent — safe to re-run. It creates the `USER`/`ADMIN` roles and the fixed
-10-key permission catalog described in `docs/FEATURES_AND_API.md` §1.
+The seed is safe to re-run: the `USER`/`ADMIN` roles and the fixed 10-key permission catalog
+(`docs/FEATURES_AND_API.md` §1) and the seeded admin account are only ever created once — a
+re-run never overwrites an existing role's permission assignments or an existing account's
+password, so it can't silently undo something an admin later customized in production.
 
 ### 4. Run the apps
 
@@ -81,8 +90,11 @@ Either run everything through Docker Compose:
 docker compose up --build
 ```
 
-This brings up Postgres, Redis, the backend (`http://localhost:4000`), and the frontend
-(`http://localhost:5173`), each with healthchecks.
+This brings up Postgres and Redis, runs migrations + seeding via a one-shot `migrate` service,
+then starts the backend (`http://localhost:4000`) and frontend (`http://localhost:5173`), each
+with healthchecks — the backend won't start until `migrate` has completed successfully. Once
+it's up, you can sign in immediately with the seeded admin account: whatever you set
+`ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD` to.
 
 Or run backend and frontend directly against the Dockerized Postgres/Redis:
 
@@ -127,8 +139,12 @@ sensitive lives in GitHub Environment secrets and is substituted into the Digita
    (public) image.
 5. **This repo** → Settings → Environments → create `staging` and `production`, each with:
    - Secrets: `DATABASE_URL`, `REDIS_URL`, `JWT_ACCESS_SECRET` (generate a distinct value per
-     environment, e.g. `openssl rand -base64 48` — never reuse the placeholder in `.env.example`)
-   - Variable: `CORS_ORIGIN` (the environment's Vercel URL)
+     environment, e.g. `openssl rand -base64 48` — never reuse the placeholder in `.env.example`),
+     `ADMIN_SEED_PASSWORD` (also distinct per environment — this becomes the seeded admin
+     account's login the first time each environment's database is seeded)
+   - Variables: `CORS_ORIGIN` (the environment's Vercel URL), `ADMIN_SEED_EMAIL` (the seeded
+     admin account's email for that environment — not a secret, but still distinct per
+     environment so staging and production don't share an admin identity)
    - Repo-level secrets (not environment-scoped): `DIGITALOCEAN_ACCESS_TOKEN`, `GHCR_PAT`
 6. **Vercel**: import the repo once, Root Directory `apps/frontend`, framework Vite. Add
    `VITE_API_URL` scoped to Production (→ prod backend URL) and to Preview scoped specifically

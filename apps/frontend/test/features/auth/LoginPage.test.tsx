@@ -2,17 +2,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../lib/apiClient";
-import { AuthProvider } from "./AuthContext";
-import { LoginPage } from "./LoginPage";
+import { ApiError } from "../../../src/lib/apiClient";
+import { AuthProvider } from "../../../src/features/auth/AuthContext";
+import { LoginPage } from "../../../src/features/auth/LoginPage";
 
 const { refreshAccessTokenMock, apiClientMock } = vi.hoisted(() => ({
   refreshAccessTokenMock: vi.fn(),
   apiClientMock: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("../../lib/apiClient", async () => {
-  const actual = await vi.importActual<typeof import("../../lib/apiClient")>("../../lib/apiClient");
+vi.mock("../../../src/lib/apiClient", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../src/lib/apiClient")>("../../../src/lib/apiClient");
   return { ...actual, apiClient: apiClientMock, refreshAccessToken: refreshAccessTokenMock };
 });
 
@@ -37,7 +38,9 @@ describe("LoginPage", () => {
   it("blocks submission and shows a field error for an invalid email", async () => {
     refreshAccessTokenMock.mockResolvedValue(false);
     renderLoginPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Email"), "not-an-email");
@@ -52,7 +55,9 @@ describe("LoginPage", () => {
     refreshAccessTokenMock.mockResolvedValue(false);
     apiClientMock.post.mockRejectedValue(new ApiError(401, "invalid credentials", null));
     renderLoginPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
@@ -75,7 +80,9 @@ describe("LoginPage", () => {
     });
 
     renderLoginPage();
-    await waitFor(() => expect(refreshAccessTokenMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(refreshAccessTokenMock).toHaveBeenCalled();
+    });
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
