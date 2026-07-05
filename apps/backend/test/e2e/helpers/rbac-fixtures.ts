@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import request from "supertest";
 import { createApp } from "../../../src/app.js";
 import { API_PREFIX } from "../../../src/common/config/api-version.js";
@@ -115,13 +116,36 @@ export async function registerAndLoginWithSession(label: string): Promise<Fixtur
   return { accessToken: body.accessToken, userId: body.user.id, refreshCookie };
 }
 
-export async function loginAsAdmin(): Promise<FixtureUser> {
-  const response = await request(app).post(`${AUTH_BASE}/login`).send({
-    email: process.env.ADMIN_SEED_EMAIL ?? "",
-    password: process.env.ADMIN_SEED_PASSWORD ?? "",
-  });
+// On failure, checks the row directly rather than just re-throwing the generic 401 — that
+// message alone can't distinguish "seed never ran" from "password hash mismatch" from
+// "some other row already occupies this email", and each points at a different fix.
+async function describeAdminSeedMismatch(email: string, password: string): Promise<string> {
+  const existing = await prisma.user.findUnique({ where: { email } });
 
-  assertLoginSucceeded(response);
+  if (!existing) {
+    return `no user row exists for ADMIN_SEED_EMAIL=${email}`;
+  }
+
+  const passwordMatches = await bcrypt.compare(password, existing.passwordHash);
+
+  return passwordMatches
+    ? `user row exists for ${email} and the password hash matches — failure is elsewhere`
+    : `user row exists for ${email} but its password hash does not match ADMIN_SEED_PASSWORD`;
+}
+
+export async function loginAsAdmin(): Promise<FixtureUser> {
+  const email = process.env.ADMIN_SEED_EMAIL ?? "";
+  const password = process.env.ADMIN_SEED_PASSWORD ?? "";
+  const response = await request(app).post(`${AUTH_BASE}/login`).send({ email, password });
+
+  if (response.status !== 200) {
+    const mismatch = await describeAdminSeedMismatch(email, password);
+    throw new Error(
+      `expected admin login to succeed, got ${response.status}: ` +
+        `${JSON.stringify(response.body)} (${mismatch})`,
+    );
+  }
+
   const body = response.body as LoginResponseBody;
 
   return { accessToken: body.accessToken, userId: body.user.id };
