@@ -1,8 +1,18 @@
 import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { API_PREFIX } from "../../src/common/config/api-version.js";
+import { redisClient } from "../../src/common/redis/client.js";
+import { prisma } from "../../src/prisma/client.js";
 
 const app = createApp();
+
+// The register/login-adjacent requests below go through the real rate limiter (Redis) and the
+// real user repository (Postgres), so this file leaves an open connection to each behind just
+// like every other e2e suite — without closing them, Jest never exits at the end of the run.
+afterAll(async () => {
+  await prisma.$disconnect();
+  redisClient.disconnect();
+});
 
 describe("security middleware", () => {
   it("sets helmet's baseline security headers on every response", async () => {
