@@ -24,6 +24,19 @@ function uniqueSuffix(): string {
   return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
+// A bad login shows up several requests later as "Cannot read properties of undefined" with
+// no indication of what actually went wrong. Failing here, at the source, with the real status
+// and body turns that into a one-line diagnosis instead of a stack trace pointing at the wrong line.
+function assertLoginSucceeded(
+  response: request.Response,
+): asserts response is request.Response & { body: LoginResponseBody } {
+  if (response.status !== 200) {
+    throw new Error(
+      `expected login to succeed, got ${response.status}: ${JSON.stringify(response.body)}`,
+    );
+  }
+}
+
 async function registerAndLogin(label: string): Promise<FixtureUser> {
   const email = `${label}-${uniqueSuffix()}@example.com`;
 
@@ -35,9 +48,9 @@ async function registerAndLogin(label: string): Promise<FixtureUser> {
     .post(`${AUTH_BASE}/login`)
     .send({ email, password: "password1" });
 
-  const body = loginResponse.body as LoginResponseBody;
+  assertLoginSucceeded(loginResponse);
 
-  return { accessToken: body.accessToken, userId: body.user.id };
+  return { accessToken: loginResponse.body.accessToken, userId: loginResponse.body.user.id };
 }
 
 // Registers a fresh user, then grants them a throwaway role holding exactly the given
@@ -91,7 +104,7 @@ export async function registerAndLoginWithSession(label: string): Promise<Fixtur
     .post(`${AUTH_BASE}/login`)
     .send({ email, password: "password1" });
 
-  const body = loginResponse.body as LoginResponseBody;
+  assertLoginSucceeded(loginResponse);
   const setCookie = loginResponse.headers["set-cookie"] as unknown as string[];
   const refreshCookie = setCookie.find((entry) => entry.startsWith("refresh_token="));
 
@@ -99,7 +112,11 @@ export async function registerAndLoginWithSession(label: string): Promise<Fixtur
     throw new Error("expected login to set a refresh_token cookie");
   }
 
-  return { accessToken: body.accessToken, userId: body.user.id, refreshCookie };
+  return {
+    accessToken: loginResponse.body.accessToken,
+    userId: loginResponse.body.user.id,
+    refreshCookie,
+  };
 }
 
 export async function loginAsAdmin(): Promise<FixtureUser> {
@@ -108,9 +125,9 @@ export async function loginAsAdmin(): Promise<FixtureUser> {
     password: process.env.ADMIN_SEED_PASSWORD ?? "",
   });
 
-  const body = response.body as LoginResponseBody;
+  assertLoginSucceeded(response);
 
-  return { accessToken: body.accessToken, userId: body.user.id };
+  return { accessToken: response.body.accessToken, userId: response.body.user.id };
 }
 
 export interface MeResponseBody {
