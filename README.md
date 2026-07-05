@@ -1,9 +1,7 @@
 # Task Tracker
 
-A full-stack Task Tracker with role-based access control and real-time task updates, built as
-a take-home assignment (`docs/ASSESMENT.md`). The functional contract is locked in
-`docs/FEATURES_AND_API.md`, and the architectural decisions behind the stack below are in
-`docs/ARCHITECTURE.md` — this file covers how to actually run, test, and deploy the project.
+A full-stack Task Tracker with role-based access control and real-time task updates. This file
+covers how to actually run, test, and deploy the project.
 
 ## Stack
 
@@ -18,8 +16,6 @@ a take-home assignment (`docs/ASSESMENT.md`). The functional contract is locked 
 | Testing          | Jest + Supertest (backend), Vitest + React Testing Library (frontend)   |
 | Monorepo         | pnpm workspaces + Turborepo                                             |
 | CI/CD            | GitHub Actions → DigitalOcean App Platform (backend), Vercel (frontend) |
-
-Full rationale for each choice is in `docs/ARCHITECTURE.md`.
 
 ## Prerequisites
 
@@ -77,10 +73,10 @@ pnpm --filter @task-tracker/backend run prisma:migrate
 pnpm --filter @task-tracker/backend run prisma:seed
 ```
 
-The seed is safe to re-run: the `USER`/`ADMIN` roles and the fixed 10-key permission catalog
-(`docs/FEATURES_AND_API.md` §1) and the seeded admin account are only ever created once — a
-re-run never overwrites an existing role's permission assignments or an existing account's
-password, so it can't silently undo something an admin later customized in production.
+The seed is safe to re-run: the `USER`/`ADMIN` roles, the fixed 10-key permission catalog, and
+the seeded admin account are only ever created once — a re-run never overwrites an existing
+role's permission assignments or an existing account's password, so it can't silently undo
+something an admin later customized in production.
 
 ### 4. Run the apps
 
@@ -157,7 +153,7 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
 ## Assumptions
 
 - Ownership-check failures return `404`, not `403` (masks whether a resource exists from a
-  caller with no visibility into it) — locked in `docs/FEATURES_AND_API.md` §5.
+  caller with no visibility into it).
 - Permissions are resolved server-side on every request via Redis; the JWT access token never
   carries permission data, so a revoked permission takes effect immediately rather than waiting
   for token expiry.
@@ -168,7 +164,7 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
 
 ## Future Improvements
 
-- Soft-delete / audit log for tasks (explicitly out of scope for v1 per `docs/ARCHITECTURE.md`).
+- Soft-delete / audit log for tasks (explicitly out of scope for v1).
 - Socket.io Redis adapter, if the backend ever needs more than one instance — not needed at the
   current `instance_count: 1` scale, but the Redis dependency for it is already in place.
 - Smaller backend Docker image — `@prisma/client`'s current production install pulls in
