@@ -70,4 +70,41 @@ describe("App routing", () => {
       expect(screen.getByRole("heading", { name: "Create your account" })).toBeInTheDocument(),
     );
   });
+
+  it("redirects a plain USER away from /admin", async () => {
+    refreshAccessTokenMock.mockResolvedValue(true);
+    apiClientMock.get.mockResolvedValue({
+      user: { id: "1", email: "ada@example.com", name: "Ada" },
+      roles: ["USER"],
+      permissions: ["task:create", "task:read:own"],
+    });
+
+    renderAt("/admin");
+
+    expect(await screen.findByRole("heading", { name: "Your tasks" })).toBeInTheDocument();
+  });
+
+  it("renders the admin page at /admin for a caller with an admin-scoped permission", async () => {
+    refreshAccessTokenMock.mockResolvedValue(true);
+    apiClientMock.get.mockImplementation((path: string) => {
+      if (path === "/auth/me") {
+        return Promise.resolve({
+          user: { id: "1", email: "admin@example.com", name: "Admin" },
+          roles: ["ADMIN"],
+          permissions: ["role:manage", "user:manage", "permission:assign"],
+        });
+      }
+      if (path === "/roles") {
+        return Promise.resolve([]);
+      }
+      if (path === "/permissions") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 0 } });
+    });
+
+    renderAt("/admin");
+
+    expect(await screen.findByRole("heading", { name: "Admin" })).toBeInTheDocument();
+  });
 });
