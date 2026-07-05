@@ -1,12 +1,15 @@
 import bcrypt from "bcryptjs";
 import { jest } from "@jest/globals";
 import jwt from "jsonwebtoken";
-import { AuthService, type PermissionsResolver } from "../../src/modules/auth/auth.service.js";
+import {
+  AuthService,
+  type AuthUsersRepository,
+  type PermissionsResolver,
+} from "../../src/modules/auth/auth.service.js";
 import type { RotateResult, SessionRepository } from "../../src/modules/auth/session.repository.js";
 import type {
   CreatedUser,
   UserRecord,
-  UsersRepository,
   UserWithRoles,
 } from "../../src/modules/users/users.repository.js";
 import { ConflictError, UnauthorizedError } from "../../src/common/errors/index.js";
@@ -26,24 +29,23 @@ function buildUser(overrides: Partial<UserRecord> = {}): UserRecord {
 }
 
 interface UsersRepositoryMocks {
-  repository: UsersRepository;
-  findByEmail: jest.Mock<UsersRepository["findByEmail"]>;
-  findByIdWithRoles: jest.Mock<UsersRepository["findByIdWithRoles"]>;
-  createWithDefaultRole: jest.Mock<UsersRepository["createWithDefaultRole"]>;
+  repository: AuthUsersRepository;
+  findByEmail: jest.Mock<AuthUsersRepository["findByEmail"]>;
+  findByIdWithRoles: jest.Mock<AuthUsersRepository["findByIdWithRoles"]>;
+  createWithDefaultRole: jest.Mock<AuthUsersRepository["createWithDefaultRole"]>;
 }
 
 function createUsersRepository(): UsersRepositoryMocks {
-  const findByEmail = jest.fn<UsersRepository["findByEmail"]>(() => Promise.resolve(null));
-  const findById = jest.fn<UsersRepository["findById"]>(() => Promise.resolve(null));
-  const findByIdWithRoles = jest.fn<UsersRepository["findByIdWithRoles"]>(() =>
+  const findByEmail = jest.fn<AuthUsersRepository["findByEmail"]>(() => Promise.resolve(null));
+  const findByIdWithRoles = jest.fn<AuthUsersRepository["findByIdWithRoles"]>(() =>
     Promise.resolve(null),
   );
-  const createWithDefaultRole = jest.fn<UsersRepository["createWithDefaultRole"]>((input) =>
+  const createWithDefaultRole = jest.fn<AuthUsersRepository["createWithDefaultRole"]>((input) =>
     Promise.resolve({ user: buildUser(input), roleId: "role-user" } satisfies CreatedUser),
   );
 
   return {
-    repository: { findByEmail, findById, findByIdWithRoles, createWithDefaultRole },
+    repository: { findByEmail, findByIdWithRoles, createWithDefaultRole },
     findByEmail,
     findByIdWithRoles,
     createWithDefaultRole,

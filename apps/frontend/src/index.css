@@ -45,3 +45,87 @@
     @apply font-sans bg-bg text-ink antialiased;
   }
 }
+
+@layer components {
+  /* Right-side slide-over. @starting-style drives the open transition; browsers without
+     support just show/hide instantly instead of erroring, since the base state (below) is
+     already a valid resting state. */
+  .drawer-panel {
+    translate: 0 0;
+    opacity: 1;
+    transition:
+      translate 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.22s ease-out,
+      overlay 0.22s allow-discrete,
+      display 0.22s allow-discrete;
+  }
+
+  .drawer-panel:not([open]) {
+    translate: 100% 0;
+    opacity: 0;
+  }
+
+  .drawer-panel::backdrop {
+    opacity: 1;
+    transition:
+      opacity 0.22s ease-out,
+      overlay 0.22s allow-discrete,
+      display 0.22s allow-discrete;
+  }
+
+  @starting-style {
+    .drawer-panel[open] {
+      translate: 100% 0;
+      opacity: 0;
+    }
+
+    .drawer-panel[open]::backdrop {
+      opacity: 0;
+    }
+  }
+
+  /* Centered confirm dialog — a subtler scale+fade, reserved for irreversible/high-cost
+     actions rather than every interaction. */
+  .confirm-dialog {
+    scale: 1;
+    opacity: 1;
+    transition:
+      scale 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.18s ease-out,
+      overlay 0.18s allow-discrete,
+      display 0.18s allow-discrete;
+  }
+
+  .confirm-dialog:not([open]) {
+    scale: 0.96;
+    opacity: 0;
+  }
+
+  .confirm-dialog::backdrop {
+    opacity: 1;
+    transition:
+      opacity 0.18s ease-out,
+      overlay 0.18s allow-discrete,
+      display 0.18s allow-discrete;
+  }
+
+  @starting-style {
+    .confirm-dialog[open] {
+      scale: 0.96;
+      opacity: 0;
+    }
+
+    .confirm-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .drawer-panel,
+    .drawer-panel::backdrop,
+    .confirm-dialog,
+    .confirm-dialog::backdrop {
+      transition: none;
+    }
+  }
+}

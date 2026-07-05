@@ -11,8 +11,14 @@ export interface PermissionSources {
   overrides: PermissionOverride[];
 }
 
+export interface PermissionCatalogEntry {
+  id: string;
+  key: string;
+}
+
 export interface PermissionsRepository {
   getPermissionSources(userId: string): Promise<PermissionSources>;
+  listCatalog(): Promise<PermissionCatalogEntry[]>;
 }
 
 export class PrismaPermissionsRepository implements PermissionsRepository {
@@ -39,5 +45,9 @@ export class PrismaPermissionsRepository implements PermissionsRepository {
         effect: override.effect,
       })),
     };
+  }
+
+  async listCatalog(): Promise<PermissionCatalogEntry[]> {
+    return prisma.permission.findMany({ select: { id: true, key: true } });
   }
 }
