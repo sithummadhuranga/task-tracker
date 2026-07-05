@@ -27,9 +27,7 @@ function uniqueSuffix(): string {
 // A bad login shows up several requests later as "Cannot read properties of undefined" with
 // no indication of what actually went wrong. Failing here, at the source, with the real status
 // and body turns that into a one-line diagnosis instead of a stack trace pointing at the wrong line.
-function assertLoginSucceeded(
-  response: request.Response,
-): asserts response is request.Response & { body: LoginResponseBody } {
+function assertLoginSucceeded(response: request.Response): void {
   if (response.status !== 200) {
     throw new Error(
       `expected login to succeed, got ${response.status}: ${JSON.stringify(response.body)}`,
@@ -49,8 +47,9 @@ async function registerAndLogin(label: string): Promise<FixtureUser> {
     .send({ email, password: "password1" });
 
   assertLoginSucceeded(loginResponse);
+  const body = loginResponse.body as LoginResponseBody;
 
-  return { accessToken: loginResponse.body.accessToken, userId: loginResponse.body.user.id };
+  return { accessToken: body.accessToken, userId: body.user.id };
 }
 
 // Registers a fresh user, then grants them a throwaway role holding exactly the given
@@ -105,6 +104,7 @@ export async function registerAndLoginWithSession(label: string): Promise<Fixtur
     .send({ email, password: "password1" });
 
   assertLoginSucceeded(loginResponse);
+  const body = loginResponse.body as LoginResponseBody;
   const setCookie = loginResponse.headers["set-cookie"] as unknown as string[];
   const refreshCookie = setCookie.find((entry) => entry.startsWith("refresh_token="));
 
@@ -112,11 +112,7 @@ export async function registerAndLoginWithSession(label: string): Promise<Fixtur
     throw new Error("expected login to set a refresh_token cookie");
   }
 
-  return {
-    accessToken: loginResponse.body.accessToken,
-    userId: loginResponse.body.user.id,
-    refreshCookie,
-  };
+  return { accessToken: body.accessToken, userId: body.user.id, refreshCookie };
 }
 
 export async function loginAsAdmin(): Promise<FixtureUser> {
@@ -126,8 +122,9 @@ export async function loginAsAdmin(): Promise<FixtureUser> {
   });
 
   assertLoginSucceeded(response);
+  const body = response.body as LoginResponseBody;
 
-  return { accessToken: response.body.accessToken, userId: response.body.user.id };
+  return { accessToken: body.accessToken, userId: body.user.id };
 }
 
 export interface MeResponseBody {
