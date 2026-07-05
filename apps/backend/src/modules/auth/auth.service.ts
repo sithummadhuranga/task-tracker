@@ -15,6 +15,13 @@ export type PermissionsResolver = Pick<
   "resolveEffectivePermissions" | "addUserToRoleIndex"
 >;
 
+// Narrowed against the full UsersRepository, which has grown RBAC-admin-only methods
+// (pagination, role/permission-override management) that auth never touches.
+export type AuthUsersRepository = Pick<
+  UsersRepository,
+  "findByEmail" | "findByIdWithRoles" | "createWithDefaultRole"
+>;
+
 export interface RegisteredUser {
   id: string;
   email: string;
@@ -42,7 +49,7 @@ export interface MeResult {
 
 export class AuthService {
   constructor(
-    private readonly usersRepository: UsersRepository = new PrismaUsersRepository(),
+    private readonly usersRepository: AuthUsersRepository = new PrismaUsersRepository(),
     private readonly sessionRepository: SessionRepository = new RedisSessionRepository(),
     private readonly permissions: PermissionsResolver = permissionsService,
   ) {}

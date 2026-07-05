@@ -5,6 +5,8 @@ import { API_PREFIX } from "./common/config/api-version.js";
 import { env } from "./common/config/env.js";
 import { errorHandler } from "./common/middleware/error-handler.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
+import { rbacRoutes } from "./modules/rbac/rbac.routes.js";
+import { usersRoutes } from "./modules/users/users.routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -19,6 +21,8 @@ export function createApp(): Express {
   });
 
   app.use(`${API_PREFIX}/auth`, authRoutes);
+  app.use(API_PREFIX, rbacRoutes);
+  app.use(`${API_PREFIX}/users`, usersRoutes);
 
   app.use(errorHandler);
 

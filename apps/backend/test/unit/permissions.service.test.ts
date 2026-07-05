@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import type {
+  PermissionCatalogEntry,
   PermissionsRepository,
   PermissionSources,
 } from "../../src/modules/rbac/permissions.repository.js";
@@ -8,16 +9,18 @@ import {
   type PermissionsRedisClient,
 } from "../../src/modules/rbac/permissions.service.js";
 
-function createRepository(sources: PermissionSources) {
+function createRepository(sources: PermissionSources, catalog: PermissionCatalogEntry[] = []) {
   const getPermissionSources = jest.fn(() => Promise.resolve(sources));
-  const repository: PermissionsRepository = { getPermissionSources };
-  return { repository, getPermissionSources };
+  const listCatalog = jest.fn(() => Promise.resolve(catalog));
+  const repository: PermissionsRepository = { getPermissionSources, listCatalog };
+  return { repository, getPermissionSources, listCatalog };
 }
 
 function createRedis(cached: string[] = []): PermissionsRedisClient {
   return {
     smembers: jest.fn(() => Promise.resolve(cached)),
     sadd: jest.fn(() => Promise.resolve(1)),
+    srem: jest.fn(() => Promise.resolve(1)),
     expire: jest.fn(() => Promise.resolve(1)),
     del: jest.fn(() => Promise.resolve(1)),
   };
@@ -157,5 +160,67 @@ describe("PermissionsService.invalidateCacheForUser", () => {
     await service.invalidateCacheForUser("user-1");
 
     expect(redis.del).toHaveBeenCalledWith("permissions:user-1");
+  });
+});
+
+describe("PermissionsService.removeUserFromRoleIndex", () => {
+  it("removes the user from the role's reverse-index set", async () => {
+    const redis = createRedis();
+    const { repository } = createRepository({ roleKeys: [], overrides: [] });
+    const service = new PermissionsService(repository, redis);
+
+    await service.removeUserFromRoleIndex("user-1", "role-1");
+
+    expect(redis.srem).toHaveBeenCalledWith("role:role-1:users", "user-1");
+  });
+});
+
+describe("PermissionsService.invalidateCacheForRole", () => {
+  it("invalidates the cache for every user currently holding the role", async () => {
+    const redis = createRedis(["user-1", "user-2"]);
+    const { repository } = createRepository({ roleKeys: [], overrides: [] });
+    const service = new PermissionsService(repository, redis);
+
+    await service.invalidateCacheForRole("role-1");
+
+    expect(redis.smembers).toHaveBeenCalledWith("role:role-1:users");
+    expect(redis.del).toHaveBeenCalledWith("permissions:user-1", "permissions:user-2");
+  });
+
+  it("does nothing when no user currently holds the role", async () => {
+    const redis = createRedis([]);
+    const { repository } = createRepository({ roleKeys: [], overrides: [] });
+    const service = new PermissionsService(repository, redis);
+
+    await service.invalidateCacheForRole("role-1");
+
+    expect(redis.del).not.toHaveBeenCalled();
+  });
+});
+
+describe("PermissionsService.deleteRoleIndex", () => {
+  it("deletes exactly the role's reverse-index key", async () => {
+    const redis = createRedis();
+    const { repository } = createRepository({ roleKeys: [], overrides: [] });
+    const service = new PermissionsService(repository, redis);
+
+    await service.deleteRoleIndex("role-1");
+
+    expect(redis.del).toHaveBeenCalledWith("role:role-1:users");
+  });
+});
+
+describe("PermissionsService.listCatalog", () => {
+  it("returns the repository's catalog unmodified, with no Redis interaction", async () => {
+    const catalog = [{ id: "perm-1", key: "task:create" }];
+    const redis = createRedis();
+    const { repository } = createRepository({ roleKeys: [], overrides: [] }, catalog);
+    const service = new PermissionsService(repository, redis);
+
+    const result = await service.listCatalog();
+
+    expect(result).toEqual(catalog);
+    expect(redis.smembers).not.toHaveBeenCalled();
+    expect(redis.del).not.toHaveBeenCalled();
   });
 });
