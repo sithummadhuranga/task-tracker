@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "lint": "eslint .",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --coverage",
     "prisma:generate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js generate",
     "prisma:migrate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate dev",
     "prisma:migrate:deploy": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate deploy",

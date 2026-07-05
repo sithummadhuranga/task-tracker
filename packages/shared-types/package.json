@@ -11,12 +11,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run --coverage"
   },
   "dependencies": {
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9",
     "vitest": "^4.1.9"
   }
 }
