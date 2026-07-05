@@ -14,4 +14,6 @@ export default {
   transformIgnorePatterns: ["/node_modules/(?!@task-tracker/)"],
   testMatch: ["<rootDir>/test/**/*.test.ts"],
   setupFiles: ["<rootDir>/test/setup-env.js"],
+  coverageProvider: "v8",
+  collectCoverageFrom: ["src/**/*.ts", "!src/generated/**"],
 };

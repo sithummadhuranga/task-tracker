@@ -12,6 +12,9 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY packages/shared-types packages/shared-types
 COPY apps/backend apps/backend
+# shared-types ships compiled JS (see its package.json "exports") — it must be built before
+# the backend, whose compiled output imports real runtime values from it, not just types.
+RUN pnpm --filter @task-tracker/shared-types run build
 WORKDIR /app/apps/backend
 # prisma generate only needs a syntactically valid connection string, not a reachable
 # database — the real one is supplied at runtime.
