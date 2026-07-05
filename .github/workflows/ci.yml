@@ -123,6 +123,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        working-directory: apps/backend
+
       - name: Apply database migrations
         run: pnpm run prisma:migrate:deploy
         working-directory: apps/backend
@@ -204,6 +208,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        working-directory: apps/backend
 
       - name: Apply database migrations
         run: pnpm run prisma:migrate:deploy
