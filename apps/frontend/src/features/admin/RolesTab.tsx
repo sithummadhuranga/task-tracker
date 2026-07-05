@@ -90,6 +90,16 @@ export function RolesTab() {
   const roles = rolesQuery.data;
   const catalog = catalogQuery.data;
 
+  // Keeps the open drawer in sync after a mutation invalidates and refetches this list (e.g.
+  // renaming the active role) — without this, activeRole stays the stale pre-mutation snapshot
+  // until the drawer is closed and reopened.
+  if (activeRole) {
+    const fresh = roles.find((role) => role.id === activeRole.id);
+    if (fresh && fresh !== activeRole) {
+      setActiveRole(fresh);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <CreateRoleForm

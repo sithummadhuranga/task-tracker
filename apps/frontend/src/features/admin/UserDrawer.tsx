@@ -49,12 +49,15 @@ export function UserDrawer({ userId, onClose }: UserDrawerProps) {
 
   // Adjusting state during render (React's documented alternative to a useEffect here) rather
   // than syncing via an effect. Two cases: switching directly to a different user clears the
-  // stale content immediately (don't show user A's data under user B's drawer); once the new
-  // user's detail has loaded, it becomes the displayed content. Closing (userId → null) hits
-  // neither branch, so the last displayed content keeps rendering through the close transition.
+  // stale content immediately (don't show user A's data under user B's drawer); once fresh
+  // detail is available for the current user, it becomes the displayed content — compared by
+  // reference (not just userId) so a refetch after a mutation invalidates this query (assign
+  // role, add/remove an override) replaces the stale snapshot too, not only on user switch.
+  // Closing (userId → null) hits neither branch, so the last displayed content keeps rendering
+  // through the close transition.
   if (userId !== null && displayed !== null && displayed.userId !== userId) {
     setDisplayed(null);
-  } else if (userId !== null && detailQuery.data && displayed?.userId !== userId) {
+  } else if (userId !== null && detailQuery.data && detailQuery.data !== displayed?.detail) {
     setDisplayed({ userId, detail: detailQuery.data });
   }
 
