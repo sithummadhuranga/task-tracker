@@ -73,6 +73,12 @@ jobs:
         run: pnpm run prisma:migrate:deploy
         working-directory: apps/backend
 
+      - name: Build shared packages
+        # seed.ts imports @task-tracker/shared-types which resolves to dist/index.js — that
+        # file doesn't exist until the package is compiled. prisma:seed runs outside Turbo so
+        # Turbo's own ^build dependency ordering never fires for this step.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
+
       - name: Seed RBAC catalog
         run: pnpm run prisma:seed
         working-directory: apps/backend
@@ -122,6 +128,11 @@ jobs:
         working-directory: apps/backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Build shared packages
+        # Same reason as the ci job — prisma:seed bypasses Turbo so shared-types must be
+        # compiled explicitly before the seed step can resolve its imports.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
 
       - name: Seed RBAC catalog
         run: pnpm run prisma:seed
@@ -199,6 +210,11 @@ jobs:
         working-directory: apps/backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Build shared packages
+        # Same reason as the ci job — prisma:seed bypasses Turbo so shared-types must be
+        # compiled explicitly before the seed step can resolve its imports.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
 
       - name: Seed RBAC catalog
         run: pnpm run prisma:seed
