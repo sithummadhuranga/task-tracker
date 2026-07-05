@@ -1,11 +1,12 @@
 import type { Request, Response } from "express";
+import { API_PREFIX } from "../../common/config/api-version.js";
 import { getAuthenticatedUser } from "../../common/middleware/authenticate.js";
 import { authService } from "./auth.service.js";
 import type { LoginInput, RegisterInput } from "./auth.dto.js";
 
 const REFRESH_COOKIE_NAME = "refresh_token";
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const REFRESH_COOKIE_PATH = "/api/auth";
+const REFRESH_COOKIE_PATH = `${API_PREFIX}/auth`;
 
 function setRefreshCookie(res: Response, token: string): void {
   res.cookie(REFRESH_COOKIE_NAME, token, {

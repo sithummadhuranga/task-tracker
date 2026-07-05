@@ -1,9 +1,11 @@
 import request from "supertest";
 import { createApp } from "../../src/app.js";
+import { API_PREFIX } from "../../src/common/config/api-version.js";
 import { prisma } from "../../src/prisma/client.js";
 import { redisClient } from "../../src/common/redis/client.js";
 
 const app = createApp();
+const AUTH_BASE = `${API_PREFIX}/auth`;
 
 interface LoginResponseBody {
   accessToken: string;
@@ -28,11 +30,11 @@ function uniqueEmail(label: string): string {
 
 async function registerAndLogin(email: string) {
   await request(app)
-    .post("/api/auth/register")
+    .post(`${AUTH_BASE}/register`)
     .send({ email, password: "password1", name: "Test User" });
 
   const loginResponse = await request(app)
-    .post("/api/auth/login")
+    .post(`${AUTH_BASE}/login`)
     .send({ email, password: "password1" });
 
   const setCookie = loginResponse.headers["set-cookie"] as unknown as string[];
@@ -55,12 +57,12 @@ afterAll(async () => {
   redisClient.disconnect();
 });
 
-describe("POST /api/auth/register", () => {
+describe(`POST ${AUTH_BASE}/register`, () => {
   it("creates a user and never returns the password hash", async () => {
     const email = uniqueEmail("register-happy");
 
     const response = await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email, password: "password1", name: "Jane Doe" });
 
     expect(response.status).toBe(201);
@@ -71,11 +73,11 @@ describe("POST /api/auth/register", () => {
   it("rejects a duplicate email with 409", async () => {
     const email = uniqueEmail("register-dup");
     await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email, password: "password1", name: "Jane" });
 
     const response = await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email, password: "password1", name: "Jane" });
 
     expect(response.status).toBe(409);
@@ -84,22 +86,22 @@ describe("POST /api/auth/register", () => {
 
   it("rejects a malformed body with 400", async () => {
     const response = await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email: uniqueEmail("register-bad"), password: "short", name: "Jane" });
 
     expect(response.status).toBe(400);
   });
 });
 
-describe("POST /api/auth/login", () => {
+describe(`POST ${AUTH_BASE}/login`, () => {
   it("issues an access token and a properly-flagged refresh cookie on success", async () => {
     const email = uniqueEmail("login-happy");
     await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email, password: "password1", name: "Jane" });
 
     const response = await request(app)
-      .post("/api/auth/login")
+      .post(`${AUTH_BASE}/login`)
       .send({ email, password: "password1" });
 
     expect(response.status).toBe(200);
@@ -115,7 +117,7 @@ describe("POST /api/auth/login", () => {
 
   it("rejects an unknown email with the generic invalid-credentials message", async () => {
     const response = await request(app)
-      .post("/api/auth/login")
+      .post(`${AUTH_BASE}/login`)
       .send({ email: uniqueEmail("no-such-user"), password: "password1" });
 
     expect(response.status).toBe(401);
@@ -125,11 +127,11 @@ describe("POST /api/auth/login", () => {
   it("rejects a wrong password with the identical generic message", async () => {
     const email = uniqueEmail("login-wrong-pw");
     await request(app)
-      .post("/api/auth/register")
+      .post(`${AUTH_BASE}/register`)
       .send({ email, password: "password1", name: "Jane" });
 
     const response = await request(app)
-      .post("/api/auth/login")
+      .post(`${AUTH_BASE}/login`)
       .send({ email, password: "wrong-password1" });
 
     expect(response.status).toBe(401);
@@ -137,16 +139,16 @@ describe("POST /api/auth/login", () => {
   });
 });
 
-describe("POST /api/auth/refresh", () => {
+describe(`POST ${AUTH_BASE}/refresh`, () => {
   it("rejects a request with no refresh cookie", async () => {
-    const response = await request(app).post("/api/auth/refresh");
+    const response = await request(app).post(`${AUTH_BASE}/refresh`);
     expect(response.status).toBe(401);
   });
 
   it("rotates a valid refresh token and issues a new access token", async () => {
     const { refreshCookie } = await registerAndLogin(uniqueEmail("refresh-happy"));
 
-    const response = await request(app).post("/api/auth/refresh").set("Cookie", refreshCookie);
+    const response = await request(app).post(`${AUTH_BASE}/refresh`).set("Cookie", refreshCookie);
 
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty("accessToken");
@@ -158,26 +160,26 @@ describe("POST /api/auth/refresh", () => {
   it("treats reuse of an already-rotated token as theft and revokes every session", async () => {
     const { refreshCookie } = await registerAndLogin(uniqueEmail("refresh-reuse"));
 
-    const firstRefresh = await request(app).post("/api/auth/refresh").set("Cookie", refreshCookie);
+    const firstRefresh = await request(app).post(`${AUTH_BASE}/refresh`).set("Cookie", refreshCookie);
     const rotatedCookie = (firstRefresh.headers["set-cookie"] as unknown as string[])
       .find((entry) => entry.startsWith("refresh_token="))
       ?.split(";")[0];
 
     // Replaying the original (now-superseded) cookie is the reuse/theft signal.
-    const reuseAttempt = await request(app).post("/api/auth/refresh").set("Cookie", refreshCookie);
+    const reuseAttempt = await request(app).post(`${AUTH_BASE}/refresh`).set("Cookie", refreshCookie);
     expect(reuseAttempt.status).toBe(401);
 
     // The legitimately-rotated token must be revoked too, not just the reused one.
     const followUp = await request(app)
-      .post("/api/auth/refresh")
+      .post(`${AUTH_BASE}/refresh`)
       .set("Cookie", rotatedCookie ?? "");
     expect(followUp.status).toBe(401);
   });
 });
 
-describe("POST /api/auth/logout", () => {
+describe(`POST ${AUTH_BASE}/logout`, () => {
   it("requires a valid access token", async () => {
-    const response = await request(app).post("/api/auth/logout");
+    const response = await request(app).post(`${AUTH_BASE}/logout`);
     expect(response.status).toBe(401);
   });
 
@@ -185,21 +187,21 @@ describe("POST /api/auth/logout", () => {
     const { accessToken, refreshCookie } = await registerAndLogin(uniqueEmail("logout-happy"));
 
     const logoutResponse = await request(app)
-      .post("/api/auth/logout")
+      .post(`${AUTH_BASE}/logout`)
       .set("Authorization", `Bearer ${accessToken}`)
       .set("Cookie", refreshCookie);
     expect(logoutResponse.status).toBe(204);
 
     const refreshAfterLogout = await request(app)
-      .post("/api/auth/refresh")
+      .post(`${AUTH_BASE}/refresh`)
       .set("Cookie", refreshCookie);
     expect(refreshAfterLogout.status).toBe(401);
   });
 });
 
-describe("POST /api/auth/logout-all", () => {
+describe(`POST ${AUTH_BASE}/logout-all`, () => {
   it("requires a valid access token", async () => {
-    const response = await request(app).post("/api/auth/logout-all");
+    const response = await request(app).post(`${AUTH_BASE}/logout-all`);
     expect(response.status).toBe(401);
   });
 
@@ -207,21 +209,21 @@ describe("POST /api/auth/logout-all", () => {
     const email = uniqueEmail("logout-all-happy");
     const first = await registerAndLogin(email);
     const secondLogin = await request(app)
-      .post("/api/auth/login")
+      .post(`${AUTH_BASE}/login`)
       .send({ email, password: "password1" });
     const secondCookie = (secondLogin.headers["set-cookie"] as unknown as string[])
       .find((entry) => entry.startsWith("refresh_token="))
       ?.split(";")[0];
 
     await request(app)
-      .post("/api/auth/logout-all")
+      .post(`${AUTH_BASE}/logout-all`)
       .set("Authorization", `Bearer ${first.accessToken}`);
 
     const refreshFirst = await request(app)
-      .post("/api/auth/refresh")
+      .post(`${AUTH_BASE}/refresh`)
       .set("Cookie", first.refreshCookie);
     const refreshSecond = await request(app)
-      .post("/api/auth/refresh")
+      .post(`${AUTH_BASE}/refresh`)
       .set("Cookie", secondCookie ?? "");
 
     expect(refreshFirst.status).toBe(401);
@@ -229,14 +231,14 @@ describe("POST /api/auth/logout-all", () => {
   });
 });
 
-describe("GET /api/auth/me", () => {
+describe(`GET ${AUTH_BASE}/me`, () => {
   it("requires a valid access token", async () => {
-    const response = await request(app).get("/api/auth/me");
+    const response = await request(app).get(`${AUTH_BASE}/me`);
     expect(response.status).toBe(401);
   });
 
   it("rejects a malformed access token", async () => {
-    const response = await request(app).get("/api/auth/me").set("Authorization", "Bearer garbage");
+    const response = await request(app).get(`${AUTH_BASE}/me`).set("Authorization", "Bearer garbage");
     expect(response.status).toBe(401);
   });
 
@@ -244,7 +246,7 @@ describe("GET /api/auth/me", () => {
     const { accessToken } = await registerAndLogin(uniqueEmail("me-happy"));
 
     const response = await request(app)
-      .get("/api/auth/me")
+      .get(`${AUTH_BASE}/me`)
       .set("Authorization", `Bearer ${accessToken}`);
 
     const body = response.body as MeResponseBody;

@@ -24,17 +24,17 @@ export interface MeResult {
 }
 
 export function registerUser(input: RegisterInput): Promise<RegisteredUser> {
-  return apiClient.post<RegisteredUser>("/api/auth/register", input);
+  return apiClient.post<RegisteredUser>("/auth/register", input);
 }
 
 export function loginUser(input: LoginInput): Promise<LoginResult> {
-  return apiClient.post<LoginResult>("/api/auth/login", input);
+  return apiClient.post<LoginResult>("/auth/login", input);
 }
 
 export async function logoutUser(): Promise<void> {
-  await apiClient.post("/api/auth/logout");
+  await apiClient.post("/auth/logout");
 }
 
 export function fetchCurrentUser(): Promise<MeResult> {
-  return apiClient.get<MeResult>("/api/auth/me");
+  return apiClient.get<MeResult>("/auth/me");
 }
