@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { ListUsersQuery, UpsertPermissionOverrideInput } from "./users.dto.js";
+import type { ListUsersQuery, UpsertPermissionOverrideInput, UserLookupQuery } from "./users.dto.js";
 import { usersService } from "./users.service.js";
 
 export async function listUsers(req: Request, res: Response): Promise<void> {
@@ -12,6 +12,12 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
     data: users,
     meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
+}
+
+export async function lookupUsers(req: Request, res: Response): Promise<void> {
+  const query = req.query as unknown as UserLookupQuery;
+  const users = await usersService.lookupUsers(query);
+  res.status(200).json(users);
 }
 
 export async function getUserDetail(req: Request<{ id: string }>, res: Response): Promise<void> {
