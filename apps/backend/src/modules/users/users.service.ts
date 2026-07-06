@@ -1,6 +1,7 @@
 import { RedisSessionRepository, type SessionRepository } from "../auth/session.repository.js";
 import { NotFoundError, ValidationError } from "../../common/errors/index.js";
 import { permissionsService, type PermissionsService } from "../rbac/permissions.service.js";
+import { socketSessionGateway, type SocketSessionGateway } from "../../websocket/gateway.js";
 import type { ListUsersQuery, UpsertPermissionOverrideInput, UserLookupQuery } from "./users.dto.js";
 import {
   PrismaUsersRepository,
@@ -14,6 +15,7 @@ const USER_LOOKUP_SEARCH_LIMIT = 10;
 
 export type CacheInvalidator = Pick<PermissionsService, "invalidateCacheForUser">;
 export type LogoutSessionRepository = Pick<SessionRepository, "revokeAllSessions">;
+export type SocketDisconnector = Pick<SocketSessionGateway, "disconnectUser">;
 
 export interface UserSummary {
   id: string;
@@ -40,6 +42,7 @@ export class UsersService {
     private readonly repository: UsersRepository = new PrismaUsersRepository(),
     private readonly sessionRepository: LogoutSessionRepository = new RedisSessionRepository(),
     private readonly permissions: CacheInvalidator = permissionsService,
+    private readonly socketDisconnector: SocketDisconnector = socketSessionGateway,
   ) {}
 
   // Never return the raw repository record as-is — it carries passwordHash, which must never
@@ -115,6 +118,7 @@ export class UsersService {
     }
 
     await this.sessionRepository.revokeAllSessions(userId);
+    this.socketDisconnector.disconnectUser(userId);
   }
 
   async lookupUsers(query: UserLookupQuery): Promise<UserLookupRecord[]> {

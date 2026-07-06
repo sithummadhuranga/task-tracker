@@ -41,6 +41,25 @@ class FakeRedis {
   smembers(key: string): Promise<string[]> {
     return Promise.resolve([...(this.sets.get(key) ?? new Set())]);
   }
+
+  // Real Redis runs the repository's Lua script server-side; this double just reproduces its
+  // read-and-tombstone semantics directly in JS (a single-threaded fake has no race to guard
+  // against, so the atomicity itself isn't what's under test here — the resulting behavior is).
+  call(command: string, ...args: unknown[]): Promise<unknown> {
+    if (command !== "EVAL") {
+      throw new Error(`FakeRedis.call: unsupported command ${command}`);
+    }
+    const key = args[2] as string;
+    const raw = this.strings.get(key);
+    if (raw === undefined) {
+      return Promise.resolve(null);
+    }
+    const decoded = JSON.parse(raw) as { userId: string; status: "active" | "rotated" };
+    if (decoded.status === "active") {
+      this.strings.set(key, JSON.stringify({ ...decoded, status: "rotated" }));
+    }
+    return Promise.resolve(raw);
+  }
 }
 
 function createRepository() {

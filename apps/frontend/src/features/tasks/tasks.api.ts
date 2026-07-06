@@ -8,6 +8,7 @@ export interface Task {
   status: TaskStatus;
   dueDate: string;
   ownerId: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +39,7 @@ export interface UpdateTaskBody {
   status?: TaskStatus;
   dueDate?: string;
   ownerId?: string;
+  version: number;
 }
 
 function buildTaskListQueryString(params: TaskListParams): string {

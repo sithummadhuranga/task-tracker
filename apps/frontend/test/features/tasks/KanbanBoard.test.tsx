@@ -19,6 +19,7 @@ function makeTask(overrides: Partial<Task> & Pick<Task, "id" | "title" | "status
   return {
     dueDate: "2026-08-01T00:00:00.000Z",
     ownerId: "user-1",
+    version: 1,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
     ...overrides,
@@ -117,7 +118,10 @@ describe("KanbanBoard", () => {
     // write) actually run, so both only become observable after a tick — not synchronously
     // after firing the drop event.
     await waitFor(() => {
-      expect(apiClientMock.patch).toHaveBeenCalledWith("/tasks/task-todo", { status: "IN_PROGRESS" });
+      expect(apiClientMock.patch).toHaveBeenCalledWith("/tasks/task-todo", {
+        status: "IN_PROGRESS",
+        version: 1,
+      });
     });
     // Optimistic: the card already shows in the destination column while the patch is in flight.
     expect(within(destination).getByText("Todo task")).toBeInTheDocument();

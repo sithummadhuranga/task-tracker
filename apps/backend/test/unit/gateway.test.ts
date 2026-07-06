@@ -2,7 +2,11 @@ import { jest } from "@jest/globals";
 import jwt from "jsonwebtoken";
 import { env } from "../../src/common/config/env.js";
 import { TASK_READ_ANY_ROOM, taskOwnerRoom, type TaskSocketServer } from "../../src/websocket/events.js";
-import { registerSocketGateway, type SocketPermissionsResolver } from "../../src/websocket/gateway.js";
+import {
+  registerSocketGateway,
+  SocketSessionGateway,
+  type SocketPermissionsResolver,
+} from "../../src/websocket/gateway.js";
 
 type SocketMiddleware = (socket: FakeSocket, next: (error?: Error) => void) => void;
 type ConnectionHandler = (socket: FakeSocket) => void;
@@ -11,10 +15,18 @@ interface FakeSocket {
   handshake: { auth: Record<string, unknown> };
   data: { userId?: string };
   join: jest.Mock<(room: string) => Promise<void>>;
+  disconnect: jest.Mock<(close?: boolean) => FakeSocket>;
 }
 
 function buildFakeSocket(auth: Record<string, unknown>): FakeSocket {
-  return { handshake: { auth }, data: {}, join: jest.fn(() => Promise.resolve()) };
+  return {
+    handshake: { auth },
+    data: {},
+    join: jest.fn(() => Promise.resolve()),
+    disconnect: jest.fn(function (this: FakeSocket) {
+      return this;
+    }),
+  };
 }
 
 interface FakeServer {
@@ -132,5 +144,48 @@ describe("registerSocketGateway room join on connection", () => {
     await Promise.resolve();
 
     expect(socket.join).not.toHaveBeenCalledWith(TASK_READ_ANY_ROOM);
+  });
+
+  it("disconnects the socket if joining rooms fails, instead of leaving it silently in none", async () => {
+    const server = buildFakeServer();
+    const permissions: SocketPermissionsResolver = {
+      resolveEffectivePermissions: jest.fn<SocketPermissionsResolver["resolveEffectivePermissions"]>(
+        () => Promise.reject(new Error("redis unavailable")),
+      ),
+    };
+    registerSocketGateway(server as unknown as TaskSocketServer, permissions);
+    const handler = getRegisteredConnectionHandler(server);
+    const socket = buildFakeSocket({});
+    socket.data.userId = "user-1";
+
+    handler(socket);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("SocketSessionGateway.disconnectUser", () => {
+  it("force-disconnects every socket in the user's room once attached", () => {
+    const disconnectSockets = jest.fn();
+    const inRoom = jest.fn(() => ({ disconnectSockets }));
+    const server = { in: inRoom };
+    const gateway = new SocketSessionGateway();
+
+    gateway.attach(server as unknown as TaskSocketServer);
+    gateway.disconnectUser("user-1");
+
+    expect(inRoom).toHaveBeenCalledWith(taskOwnerRoom("user-1"));
+    expect(disconnectSockets).toHaveBeenCalledWith(true);
+  });
+
+  it("is a no-op when no server has been attached yet", () => {
+    const gateway = new SocketSessionGateway();
+
+    expect(() => {
+      gateway.disconnectUser("user-1");
+    }).not.toThrow();
   });
 });

@@ -26,6 +26,7 @@ const EXISTING_TASK = {
   status: "TODO",
   dueDate: "2026-08-01T12:00:00.000Z",
   ownerId: OWN_USER.id,
+  version: 1,
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
@@ -170,6 +171,25 @@ describe("TaskDrawer", () => {
     // Re-entering edit mode should show the original value, not the discarded draft.
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(await screen.findByDisplayValue("Write report")).toBeInTheDocument();
+  });
+
+  it("shows a conflict toast and returns to the read-only view on a stale-version 409", async () => {
+    apiClientMock.patch.mockRejectedValue(new ApiError(409, "task was changed since you last loaded it", null));
+    renderDrawer({ mode: "edit", taskId: EXISTING_TASK.id }, ["task:update:own"]);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const titleInput = await screen.findByDisplayValue("Write report");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Someone else's edit");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(apiClientMock.patch).toHaveBeenCalled();
+    });
+    expect(await screen.findByRole("heading", { name: "Task details" })).toBeInTheDocument();
+    expect(screen.getByText("Write report")).toBeInTheDocument();
+    expect(screen.queryByText("Someone else's edit")).not.toBeInTheDocument();
   });
 
   it("shows a generic not-found state for a 404 (missing task or unauthorized-and-not-owner)", async () => {

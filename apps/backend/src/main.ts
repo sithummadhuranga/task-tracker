@@ -4,7 +4,7 @@ import { createApp } from "./app.js";
 import { env } from "./common/config/env.js";
 import { logger } from "./common/logging/logger.js";
 import { taskEventsEmitter, type TaskSocketServer } from "./websocket/events.js";
-import { registerSocketGateway } from "./websocket/gateway.js";
+import { registerSocketGateway, socketSessionGateway } from "./websocket/gateway.js";
 
 const app = createApp();
 // Socket.io needs a real http.Server to attach to — createApp() alone (what supertest drives in
@@ -17,6 +17,7 @@ const io: TaskSocketServer = new Server(httpServer, {
 
 registerSocketGateway(io);
 taskEventsEmitter.attach(io);
+socketSessionGateway.attach(io);
 
 httpServer.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, "backend listening");

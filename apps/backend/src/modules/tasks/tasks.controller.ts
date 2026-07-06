@@ -24,7 +24,9 @@ export async function getTask(req: Request<{ id: string }>, res: Response): Prom
 export async function listTasks(req: Request, res: Response): Promise<void> {
   const { id: callerId } = getAuthenticatedUser(req);
   // validate() has already replaced req.query with the coerced-and-defaulted TaskListQuery
-  // shape by the time this handler runs.
+  // shape by the time this handler runs. Express's ReqQuery generic requires extends ParsedQs
+  // (string-only values), which this coerced shape (numbers, literal unions) doesn't satisfy,
+  // so a cast here is the pragmatic option, not a typed-generics one.
   const query = req.query as unknown as TaskListQuery;
   const { tasks, total } = await tasksService.listTasks(callerId, query);
 
