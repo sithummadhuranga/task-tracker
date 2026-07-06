@@ -18,6 +18,14 @@ export function App() {
         }
       />
       <Route
+        path="/tasks/:id"
+        element={
+          <RequireAuth>
+            <HomePage />
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/admin"
         element={
           <RequireAuth>

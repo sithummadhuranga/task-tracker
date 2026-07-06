@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../../src/features/auth/AuthContext";
 import { HomePage } from "../../../src/features/tasks/HomePage";
@@ -48,7 +48,7 @@ function taskPage(
   };
 }
 
-function renderHomePage(permissions: string[], onGet?: (path: string) => unknown) {
+function renderHomePage(permissions: string[], onGet?: (path: string) => unknown, initialPath = "/") {
   refreshAccessTokenMock.mockResolvedValue(true);
   apiClientMock.get.mockImplementation((path: string) => {
     if (path === "/auth/me") {
@@ -64,9 +64,12 @@ function renderHomePage(permissions: string[], onGet?: (path: string) => unknown
 
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialPath]}>
         <AuthProvider>
-          <HomePage />
+          <Routes>
+            <Route path="/tasks/:id" element={<HomePage />} />
+            <Route path="/" element={<HomePage />} />
+          </Routes>
         </AuthProvider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -125,5 +128,33 @@ describe("HomePage", () => {
     await screen.findByText("No tasks match these filters.");
 
     expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
+  });
+
+  it("opens the edit drawer directly when landing on /tasks/:id, e.g. a shared or refreshed link", async () => {
+    const task = makeTask({ title: "Deep-linked task" });
+    renderHomePage(
+      ["task:read:own", "task:update:own"],
+      (path) => (path === `/tasks/${task.id}` ? task : taskPage([task])),
+      `/tasks/${task.id}`,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Edit task" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Deep-linked task")).toBeInTheDocument();
+  });
+
+  it("navigates back to / when the drawer opened from a route param is closed", async () => {
+    const task = makeTask({ title: "Deep-linked task" });
+    renderHomePage(
+      ["task:read:own", "task:update:own"],
+      (path) => (path === `/tasks/${task.id}` ? task : taskPage([task])),
+      `/tasks/${task.id}`,
+    );
+
+    await screen.findByRole("heading", { name: "Edit task" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Close panel" }));
+
+    expect(screen.queryByRole("heading", { name: "Edit task" })).not.toBeInTheDocument();
   });
 });

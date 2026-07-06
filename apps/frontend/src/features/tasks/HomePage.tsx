@@ -2,6 +2,7 @@ import type { TaskStatus } from "@task-tracker/shared-types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AppHeader } from "../../components/ui/AppHeader";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
@@ -20,12 +21,30 @@ const PAGE_SIZE = 10;
 export function HomePage() {
   const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // The route param is the single source of truth for the edit drawer, so a task can be
+  // deep-linked, shared, refreshed, or reached via browser back/forward — not just opened from
+  // a row click in the current session's in-memory state.
+  const { id: routeTaskId } = useParams<{ id: string }>();
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<TaskStatus | "">("");
   const [ownerId, setOwnerId] = useState("");
-  const [drawerTarget, setDrawerTarget] = useState<TaskDrawerTarget>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskPendingDelete, setTaskPendingDelete] = useState<Task | null>(null);
+
+  const drawerTarget: TaskDrawerTarget = isCreateOpen
+    ? { mode: "create" }
+    : routeTaskId
+      ? { mode: "edit", taskId: routeTaskId }
+      : null;
+
+  function closeDrawer(): void {
+    setIsCreateOpen(false);
+    if (routeTaskId) {
+      void navigate("/");
+    }
+  }
 
   const canSeeAnyOwner = hasPermission("task:read:any");
 
@@ -79,7 +98,7 @@ export function HomePage() {
             <button
               type="button"
               onClick={() => {
-                setDrawerTarget({ mode: "create" });
+                setIsCreateOpen(true);
               }}
               className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             >
@@ -115,7 +134,7 @@ export function HomePage() {
               canEdit={canEditTask}
               canDelete={canDeleteTask}
               onEdit={(task) => {
-                setDrawerTarget({ mode: "edit", taskId: task.id });
+                void navigate(`/tasks/${task.id}`);
               }}
               onDeleteRequest={(task) => {
                 setTaskPendingDelete(task);
@@ -160,12 +179,7 @@ export function HomePage() {
         )}
       </main>
 
-      <TaskDrawer
-        target={drawerTarget}
-        onClose={() => {
-          setDrawerTarget(null);
-        }}
-      />
+      <TaskDrawer target={drawerTarget} onClose={closeDrawer} />
 
       <ConfirmDialog
         isOpen={taskPendingDelete !== null}
