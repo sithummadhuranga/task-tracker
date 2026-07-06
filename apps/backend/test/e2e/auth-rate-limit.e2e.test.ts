@@ -22,7 +22,12 @@ function uniqueRouteKey(label: string): string {
   return `test-${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
-afterAll(() => {
+afterAll(async () => {
+  // Each createAuthRateLimiter() call above kicks off its own fire-and-forget Lua script load.
+  // ping() sits behind all of them in the same FIFO command queue, so awaiting it guarantees
+  // those loads have settled before we disconnect instead of racing them — an in-flight load
+  // rejected by disconnect logs after Jest considers the file done and fails the run.
+  await redisClient.ping().catch(() => undefined);
   redisClient.disconnect();
 });
 

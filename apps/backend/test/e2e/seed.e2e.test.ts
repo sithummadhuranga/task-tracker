@@ -8,9 +8,12 @@ const ADMIN_EMAIL = process.env.ADMIN_SEED_EMAIL ?? "";
 
 afterAll(async () => {
   await prisma.$disconnect();
-  // seedAdminUser touches Redis via permissionsService.addUserToRoleIndex — without this,
-  // the connection it opens (or reopens, if auth.e2e.test.ts already disconnected it) is the
-  // one open handle left when the whole suite finishes.
+  // Importing app.js constructs the auth rate limiters, which kick off a fire-and-forget Lua
+  // script load over this same connection at import time. ping() sits behind that load in the
+  // same FIFO command queue, so awaiting it guarantees the load has settled before we disconnect
+  // instead of racing it (an in-flight load rejected by disconnect logs after Jest considers the
+  // file done and fails the run).
+  await redisClient.ping().catch(() => undefined);
   redisClient.disconnect();
 });
 

@@ -6,11 +6,15 @@ import { prisma } from "../../src/prisma/client.js";
 
 const app = createApp();
 
-// The register/login-adjacent requests below go through the real rate limiter (Redis) and the
-// real user repository (Postgres), so this file leaves an open connection to each behind just
-// like every other e2e suite — without closing them, Jest never exits at the end of the run.
+// createApp() constructs the auth rate limiters, which kick off a fire-and-forget Redis Lua
+// script load at import time — so this connection (and the Postgres one the register/login
+// requests below use) needs closing just like every other e2e suite, or Jest never exits.
 afterAll(async () => {
   await prisma.$disconnect();
+  // ping() sits behind the script-load call in the same FIFO command queue, so awaiting it
+  // guarantees that load has settled before we disconnect instead of racing it (an in-flight
+  // load rejected by disconnect logs after Jest considers the file done and fails the run).
+  await redisClient.ping().catch(() => undefined);
   redisClient.disconnect();
 });
 
