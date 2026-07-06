@@ -6,6 +6,7 @@ const VALID_ENV = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/task_tracker",
   REDIS_URL: "redis://localhost:6379",
   CORS_ORIGIN: "http://localhost:5173",
+  JWT_ACCESS_SECRET: "a".repeat(32),
 };
 
 describe("parseEnv", () => {
@@ -23,6 +24,7 @@ describe("parseEnv", () => {
 
     expect(env.PORT).toBe(4000);
     expect(env.NODE_ENV).toBe("development");
+    expect(env.LOG_LEVEL).toBe("info");
   });
 
   it("throws a clear, actionable error when a required var is missing", () => {
@@ -33,5 +35,11 @@ describe("parseEnv", () => {
 
   it("throws when a required var is present but malformed", () => {
     expect(() => parseEnv({ ...VALID_ENV, DATABASE_URL: "not-a-url" })).toThrow(/DATABASE_URL/);
+  });
+
+  it("throws when JWT_ACCESS_SECRET is shorter than 32 characters", () => {
+    expect(() => parseEnv({ ...VALID_ENV, JWT_ACCESS_SECRET: "too-short" })).toThrow(
+      /JWT_ACCESS_SECRET/,
+    );
   });
 });

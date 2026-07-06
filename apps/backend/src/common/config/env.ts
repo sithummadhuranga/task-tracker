@@ -6,6 +6,14 @@ const envSchema = z.object({
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   CORS_ORIGIN: z.url(),
+  JWT_ACCESS_SECRET: z.string().min(32),
+  AUTH_RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 });
 
 export function parseEnv(rawEnv: NodeJS.ProcessEnv) {

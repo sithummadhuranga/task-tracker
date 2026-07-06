@@ -3,6 +3,13 @@ import { jest } from "@jest/globals";
 import { ValidationError, NotFoundError } from "../../src/common/errors/index.js";
 import { errorHandler } from "../../src/common/middleware/error-handler.js";
 
+// pino-http (wired ahead of every route in app.ts) guarantees a real req.log in production; the
+// AppError/exposable-error branches below never touch it, but any test that reaches the generic
+// 500 fallback needs this stand-in since it constructs a bare request object.
+function withLogStub(): Request & { log: { error: jest.Mock } } {
+  return { log: { error: jest.fn() } } as unknown as Request & { log: { error: jest.Mock } };
+}
+
 function createMockResponse() {
   const res = {
     statusCode: 0,
@@ -48,11 +55,46 @@ describe("errorHandler", () => {
     });
   });
 
-  it("masks unexpected errors behind a generic 500, never leaking internals", () => {
+  it("surfaces an http-errors-style exposable error under its own statusCode, e.g. body-parser's 413", () => {
     const res = createMockResponse();
-    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const payloadTooLarge = Object.assign(new Error("request entity too large"), {
+      statusCode: 413,
+      expose: true,
+    });
 
-    errorHandler(new Error("leaked db connection string"), req, res, next);
+    errorHandler(payloadTooLarge, req, res, next);
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({
+      statusCode: 413,
+      error: "Payload Too Large",
+      message: "request entity too large",
+    });
+  });
+
+  it("falls back to the raw message as 'error' for an exposable status code with no known reason phrase", () => {
+    const res = createMockResponse();
+    const teapot = Object.assign(new Error("short and stout"), {
+      statusCode: 418,
+      expose: true,
+    });
+
+    errorHandler(teapot, req, res, next);
+
+    expect(res.statusCode).toBe(418);
+    expect(res.body).toEqual({
+      statusCode: 418,
+      error: "short and stout",
+      message: "short and stout",
+    });
+  });
+
+  it("masks unexpected errors behind a generic 500, never leaking internals, and logs via req.log", () => {
+    const res = createMockResponse();
+    const reqWithLog = withLogStub();
+    const error = new Error("leaked db connection string");
+
+    errorHandler(error, reqWithLog, res, next);
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
@@ -60,8 +102,6 @@ describe("errorHandler", () => {
       error: "Internal Server Error",
       message: "Something went wrong",
     });
-    expect(consoleErrorSpy).toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
+    expect(reqWithLog.log.error).toHaveBeenCalledWith({ err: error }, "unhandled error");
   });
 });

@@ -13,6 +13,13 @@ env:
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/task_tracker_test
   REDIS_URL: redis://localhost:6379
   CORS_ORIGIN: http://localhost:5173
+  # Ephemeral CI database only — not a real secret, so a fixed value here is fine (same
+  # reasoning as the values above). Jest's own setupFiles fall back to an equivalent value
+  # for the actual test run; this covers the standalone "Seed RBAC catalog" step, which runs
+  # the seed script directly, outside Jest.
+  JWT_ACCESS_SECRET: test-only-secret-value-not-used-in-production-00000000
+  ADMIN_SEED_EMAIL: test-admin@example.com
+  ADMIN_SEED_PASSWORD: test-only-admin-password-1
 
 jobs:
   ci:
@@ -66,6 +73,16 @@ jobs:
         run: pnpm run prisma:migrate:deploy
         working-directory: apps/backend
 
+      - name: Build shared packages
+        # seed.ts imports @task-tracker/shared-types which resolves to dist/index.js — that
+        # file doesn't exist until the package is compiled. prisma:seed runs outside Turbo so
+        # Turbo's own ^build dependency ordering never fires for this step.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
+
+      - name: Seed RBAC catalog
+        run: pnpm run prisma:seed
+        working-directory: apps/backend
+
       - name: Lint
         run: pnpm turbo run lint
 
@@ -80,6 +97,13 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: staging
+    # Overrides the workflow-level group: a second push must queue behind this deploy, never
+    # cancel it — cancel-in-progress mid `prisma migrate deploy` can leave a migration marked
+    # "started" in _prisma_migrations, which then blocks every later deploy until someone runs
+    # `prisma migrate resolve` by hand.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -99,11 +123,34 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        working-directory: apps/backend
+
       - name: Apply database migrations
         run: pnpm run prisma:migrate:deploy
         working-directory: apps/backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Build shared packages
+        # Same reason as the ci job — prisma:seed bypasses Turbo so shared-types must be
+        # compiled explicitly before the seed step can resolve its imports.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
+
+      - name: Seed RBAC catalog
+        run: pnpm run prisma:seed
+        working-directory: apps/backend
+        env:
+          # The seed script imports the app's own env.ts, which validates the full schema
+          # eagerly on import (not just DATABASE_URL) — every one of these is required or the
+          # step throws before touching the database.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          ADMIN_SEED_EMAIL: ${{ vars.ADMIN_SEED_EMAIL }}
+          ADMIN_SEED_PASSWORD: ${{ secrets.ADMIN_SEED_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -128,6 +175,7 @@ jobs:
           GHCR_CREDENTIALS: ${{ github.actor }}:${{ secrets.GHCR_PAT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
@@ -138,6 +186,10 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: production
+    # Same reasoning as deploy-staging's override — queue, never cancel, a live migration.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -157,11 +209,34 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        working-directory: apps/backend
+
       - name: Apply database migrations
         run: pnpm run prisma:migrate:deploy
         working-directory: apps/backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Build shared packages
+        # Same reason as the ci job — prisma:seed bypasses Turbo so shared-types must be
+        # compiled explicitly before the seed step can resolve its imports.
+        run: pnpm turbo run build --filter=@task-tracker/shared-types
+
+      - name: Seed RBAC catalog
+        run: pnpm run prisma:seed
+        working-directory: apps/backend
+        env:
+          # The seed script imports the app's own env.ts, which validates the full schema
+          # eagerly on import (not just DATABASE_URL) — every one of these is required or the
+          # step throws before touching the database.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          ADMIN_SEED_EMAIL: ${{ vars.ADMIN_SEED_EMAIL }}
+          ADMIN_SEED_PASSWORD: ${{ secrets.ADMIN_SEED_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -186,6 +261,7 @@ jobs:
           GHCR_CREDENTIALS: ${{ github.actor }}:${{ secrets.GHCR_PAT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

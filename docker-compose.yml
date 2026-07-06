@@ -31,6 +31,29 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      # The "build" stage still has devDependencies (the prisma CLI, the raw migrations/seed
+      # source) — the slim "runtime" stage deliberately doesn't, so migrations run from here
+      # instead of bloating the image the backend service actually runs.
+      target: build
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # The seed script imports the backend's own env.ts, which validates its full schema
+      # eagerly on import — every one of these is required or the step fails before it
+      # touches the database, same as migrate/seed in CI.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-task_tracker}
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      ADMIN_SEED_EMAIL: ${ADMIN_SEED_EMAIL}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD}
+    command: sh -c "pnpm run prisma:migrate:deploy && pnpm run prisma:seed"
+
   backend:
     build:
       context: .
@@ -41,12 +64,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-task_tracker}
       REDIS_URL: redis://redis:6379
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
     ports:
       - "${BACKEND_PORT:-4000}:4000"
     healthcheck:
@@ -65,6 +91,8 @@ services:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
     restart: unless-stopped
     depends_on:
       backend:
