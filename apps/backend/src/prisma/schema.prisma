@@ -61,6 +61,10 @@ model RolePermission {
   @@id([roleId, permissionId])
 }
 
+// getPermissionSources looks up both of these tables by userId alone, with no explicit
+// @@index([userId]) — not an oversight. Postgres can use a multi-column btree index for an
+// equality lookup on just its leading column, and userId is the leading column of both the
+// @@id below and UserPermission's @@unique, so those constraints double as the userId index.
 model UserRole {
   userId String
   roleId String
@@ -85,13 +89,21 @@ model UserPermission {
 
 model Task {
   id          String     @id @default(uuid())
-  title       String
-  description String?
+  // Mirrors the DTO's Zod limits (docs/FEATURES_AND_API.md) at the column level too — Zod only
+  // guards the API surface, and a direct DB write (a script, a future admin tool, a migration
+  // bug) would otherwise accept an arbitrarily long value with no schema-level backstop.
+  title       String     @db.VarChar(200)
+  description String?    @db.VarChar(2000)
   status      TaskStatus @default(TODO)
   dueDate     DateTime
   ownerId     String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  // Soft delete: DELETE /tasks/:id sets this instead of removing the row. Null means "not
+  // deleted" — every repository query filters on it, and the API response never includes this
+  // column (see the repository's explicit `select`), so a soft-deleted task is indistinguishable
+  // from a hard-deleted one to any API caller.
+  deletedAt   DateTime?
 
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 

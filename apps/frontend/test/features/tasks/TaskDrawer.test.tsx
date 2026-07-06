@@ -98,18 +98,78 @@ describe("TaskDrawer", () => {
     expect(screen.getByLabelText("Owner")).toBeInTheDocument();
   });
 
-  it("loads and pre-fills an existing task in edit mode, hiding the owner field without task:update:any", async () => {
+  it("opens an edit target into a read-only detail view, not straight into the form", async () => {
     renderDrawer({ mode: "edit", taskId: EXISTING_TASK.id }, ["task:update:own"]);
 
-    expect(await screen.findByDisplayValue("Write report")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Task details" })).toBeInTheDocument();
+    expect(screen.getByText("Write report")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+  });
+
+  it("shows no Edit button for a caller who can view but not edit the task", async () => {
+    const otherOwnersTask = { ...EXISTING_TASK, ownerId: "someone-else" };
+    apiClientMock.get.mockImplementation((path: string) => {
+      if (path === "/auth/me") {
+        return Promise.resolve({ user: OWN_USER, roles: ["USER"], permissions: ["task:read:any"] });
+      }
+      if (path === `/tasks/${otherOwnersTask.id}`) {
+        return Promise.resolve(otherOwnersTask);
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+    refreshAccessTokenMock.mockResolvedValue(true);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider>
+          <TaskDrawer target={{ mode: "edit", taskId: otherOwnersTask.id }} onClose={vi.fn()} />
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Task details" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("clicking Edit reveals the pre-filled form, and the owner field only for task:update:any", async () => {
+    renderDrawer({ mode: "edit", taskId: EXISTING_TASK.id }, ["task:update:own"]);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    expect(await screen.findByRole("heading", { name: "Edit task" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Write report")).toBeInTheDocument();
     expect(screen.queryByLabelText("Owner")).not.toBeInTheDocument();
   });
 
   it("shows an owner field in edit mode for a caller with task:update:any", async () => {
     renderDrawer({ mode: "edit", taskId: EXISTING_TASK.id }, ["task:update:any"]);
 
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
     expect(await screen.findByDisplayValue("Write report")).toBeInTheDocument();
     expect(screen.getByLabelText("Owner")).toBeInTheDocument();
+  });
+
+  it("Cancel discards the draft and returns to the read-only view without closing the drawer", async () => {
+    renderDrawer({ mode: "edit", taskId: EXISTING_TASK.id }, ["task:update:own"]);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const titleInput = await screen.findByDisplayValue("Write report");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Something else entirely");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(await screen.findByRole("heading", { name: "Task details" })).toBeInTheDocument();
+    expect(screen.getByText("Write report")).toBeInTheDocument();
+    expect(screen.queryByText("Something else entirely")).not.toBeInTheDocument();
+
+    // Re-entering edit mode should show the original value, not the discarded draft.
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(await screen.findByDisplayValue("Write report")).toBeInTheDocument();
   });
 
   it("shows a generic not-found state for a 404 (missing task or unauthorized-and-not-owner)", async () => {

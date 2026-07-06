@@ -21,6 +21,12 @@ const queryClient = new QueryClient({
         }
         return failureCount < 2;
       },
+      // The default of 0 means every remount (e.g. closing and reopening the task drawer)
+      // refetches even though task/user/role data rarely changes between one interaction and
+      // the next — real-time task updates already arrive over the socket and invalidate the
+      // relevant query directly (useTaskRealtimeSync.ts), so this window is purely about
+      // skipping redundant refetches, not staleness the app depends on.
+      staleTime: 30_000,
     },
   },
 });
