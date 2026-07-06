@@ -3,6 +3,27 @@
 A full-stack Task Tracker with role-based access control and real-time task updates. This file
 covers how to actually run, test, and deploy the project.
 
+## Live Demo
+
+| Environment | Frontend | Backend |
+| ----------- | -------- | ------- |
+| Production  | https://task-tracker.sithum.dev/     | https://api-task-tracker.sithum.dev/ |
+| Staging     | https://task-tracker-dev.sithum.dev/ | https://api-task-tracker-dev.sithum.dev/ |
+
+Both track their respective branch automatically (`main` → production, `develop` → staging) via
+the CI/CD pipeline described below. Free-tier hosting on all four services (DigitalOcean, Vercel,
+Neon, Upstash), so the very first request after a period of inactivity may take a few seconds to
+cold-start. No demo login is published here — register a new account through the frontend to try
+it, or ask for a reviewer login separately.
+
+## Documentation
+
+- [`docs/FEATURES_AND_API.md`](docs/FEATURES_AND_API.md) — the complete API contract: every
+  entity, endpoint, permission requirement, and locked behavioral decision.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — stack rationale, repository layout, and the
+  routes → controller → service → repository → Prisma layering rule.
+- [`postman/`](postman/) — the Postman collection and environment referenced below.
+
 ## Stack
 
 | Layer            | Choice                                                                  |
