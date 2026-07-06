@@ -21,4 +21,10 @@ export default {
   testTimeout: 15000,
   coverageProvider: "v8",
   collectCoverageFrom: ["src/**/*.ts", "!src/generated/**"],
+  // A floor a few points below the current suite (97%+ across the board), not the current
+  // number itself — enough headroom that a routine change doesn't fail CI on noise, while
+  // still catching a real drop (e.g. a new module landing with no tests at all).
+  coverageThreshold: {
+    global: { statements: 90, branches: 85, functions: 95, lines: 90 },
+  },
 };

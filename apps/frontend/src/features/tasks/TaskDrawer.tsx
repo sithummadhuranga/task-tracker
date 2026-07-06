@@ -11,6 +11,8 @@ import { useAuth } from "../auth/AuthContext";
 import { SubmitButton } from "../auth/SubmitButton";
 import { OwnerPicker } from "./OwnerPicker";
 import { STATUS_LABEL, fromDatetimeLocalValue, toDatetimeLocalValue } from "./taskFormatting";
+import { canEditTask } from "./taskPermissions";
+import { TaskDetailView } from "./TaskDetailView";
 import { createTask, fetchTask, updateTask, type CreateTaskBody, type Task, type UpdateTaskBody } from "./tasks.api";
 
 export type TaskDrawerTarget = { mode: "create" } | { mode: "edit"; taskId: string } | null;
@@ -26,9 +28,20 @@ interface DraftState {
   status: TaskStatus;
   dueDateLocal: string;
   ownerId: string;
+  version: number;
 }
 
-const EMPTY_DRAFT: DraftState = { title: "", description: "", status: "TODO", dueDateLocal: "", ownerId: "" };
+// version: 1 is a placeholder for create mode only — the create request never sends it (a new
+// task has no prior version to check in against), and edit mode always overwrites it via
+// draftFromTask before the form is shown.
+const EMPTY_DRAFT: DraftState = {
+  title: "",
+  description: "",
+  status: "TODO",
+  dueDateLocal: "",
+  ownerId: "",
+  version: 1,
+};
 
 const FIELD_CLASSES =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60";
@@ -40,16 +53,20 @@ function draftFromTask(task: Task): DraftState {
     status: task.status,
     dueDateLocal: toDatetimeLocalValue(task.dueDate),
     ownerId: task.ownerId,
+    version: task.version,
   };
 }
 
 export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const taskId = target?.mode === "edit" ? target.taskId : null;
 
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // "view" only ever applies to an edit target — create always starts (and stays) in "edit"
+  // since there's nothing yet to show a read-only view of.
+  const [panelMode, setPanelMode] = useState<"view" | "edit">("view");
   const dueDateRef = useRef<HTMLInputElement>(null);
 
   // The native calendar-picker-indicator icon is a small click target — showPicker() lets a
@@ -84,9 +101,11 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
     if (target.mode === "create") {
       setDraft(EMPTY_DRAFT);
       setLoadedKey("create");
+      setPanelMode("edit");
     } else if (detailQuery.data) {
       setDraft(draftFromTask(detailQuery.data));
       setLoadedKey(target.taskId);
+      setPanelMode("view");
     }
   }
 
@@ -116,7 +135,16 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
       invalidateTasks(vars.id);
       onClose();
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, vars) => {
+      // A stale version means someone else changed this task since it was loaded — refetch and
+      // fall back to the read-only view instead of leaving the caller's now-outdated draft in
+      // the form, where saving again would just hit the same conflict.
+      if (error instanceof ApiError && error.statusCode === 409) {
+        toast.error("This task was changed elsewhere — showing the latest version.");
+        invalidateTasks(vars.id);
+        setPanelMode("view");
+        return;
+      }
       toast.error(errorMessage(error));
     },
   });
@@ -130,6 +158,16 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
     detailQuery.isError &&
     detailQuery.error instanceof ApiError &&
     detailQuery.error.statusCode === 404;
+  const canEditThisTask = detailQuery.data ? canEditTask(detailQuery.data, user?.id, hasPermission) : false;
+  const showForm =
+    target?.mode === "create" || (target?.mode === "edit" && panelMode === "edit" && Boolean(detailQuery.data));
+
+  function handleCancelEdit(): void {
+    if (detailQuery.data) {
+      setDraft(draftFromTask(detailQuery.data));
+    }
+    setPanelMode("view");
+  }
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -156,13 +194,17 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
         status: draft.status,
         dueDate,
         ownerId: canSetOwnerOnEdit && draft.ownerId.trim() ? draft.ownerId.trim() : undefined,
+        version: draft.version,
       };
       updateMutation.mutate({ id: target.taskId, body });
     }
   }
 
+  const drawerTitle =
+    target?.mode === "create" ? "New task" : panelMode === "edit" ? "Edit task" : "Task details";
+
   return (
-    <Drawer isOpen={target !== null} onClose={onClose} title={target?.mode === "edit" ? "Edit task" : "New task"}>
+    <Drawer isOpen={target !== null} onClose={onClose} title={drawerTitle}>
       {target?.mode === "edit" && detailQuery.isPending && <p className="text-sm text-muted">Loading task...</p>}
 
       {target?.mode === "edit" && detailQuery.isError && (
@@ -172,7 +214,18 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
         />
       )}
 
-      {(target?.mode === "create" || (target?.mode === "edit" && detailQuery.data)) && (
+      {target?.mode === "edit" && panelMode === "view" && detailQuery.data && (
+        <TaskDetailView
+          task={detailQuery.data}
+          currentUserId={user?.id}
+          canEdit={canEditThisTask}
+          onEdit={() => {
+            setPanelMode("edit");
+          }}
+        />
+      )}
+
+      {showForm && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="task-title" className="mb-1.5 block text-sm font-medium text-ink">
@@ -272,11 +325,23 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
             </div>
           )}
 
-          <SubmitButton
-            isSubmitting={isPending}
-            label={target.mode === "create" ? "Create task" : "Save changes"}
-            loadingLabel="Saving..."
-          />
+          <div className="flex items-center gap-2">
+            <SubmitButton
+              isSubmitting={isPending}
+              label={target.mode === "create" ? "Create task" : "Save changes"}
+              loadingLabel="Saving..."
+            />
+            {target.mode === "edit" && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleCancelEdit}
+                className="rounded-xl px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       )}
     </Drawer>

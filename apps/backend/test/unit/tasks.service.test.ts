@@ -1,5 +1,5 @@
 import { jest } from "@jest/globals";
-import { NotFoundError } from "../../src/common/errors/index.js";
+import { ConflictError, NotFoundError } from "../../src/common/errors/index.js";
 import type {
   TaskEventNotifier,
   TaskPermissionsResolver,
@@ -23,6 +23,7 @@ function buildTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
     status: "TODO",
     dueDate: NOW,
     ownerId: OWNER_ID,
+    version: 1,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -46,7 +47,7 @@ function createTasksRepository(): TasksRepositoryMocks {
   const findManyPaginated = jest.fn<TasksRepository["findManyPaginated"]>(() =>
     Promise.resolve({ tasks: [buildTask()], total: 1 }),
   );
-  const update = jest.fn<TasksRepository["update"]>((id, data) =>
+  const update = jest.fn<TasksRepository["update"]>((id, _expectedVersion, data) =>
     Promise.resolve(buildTask({ id, ...data })),
   );
   const deleteTask = jest.fn<TasksRepository["delete"]>(() => Promise.resolve());
@@ -263,7 +264,7 @@ describe("TasksService.updateTask", () => {
       buildService(repository, createPermissions(["task:update:own"])).updateTask(
         OWNER_ID,
         "task-1",
-        { title: "New title" },
+        { title: "New title", version: 1 },
       ),
     ).rejects.toThrow(NotFoundError);
     expect(repository.update).not.toHaveBeenCalled();
@@ -277,7 +278,7 @@ describe("TasksService.updateTask", () => {
       buildService(repository, createPermissions(["task:update:own"])).updateTask(
         OWNER_ID,
         "ghost",
-        { title: "New title" },
+        { title: "New title", version: 1 },
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -289,14 +290,14 @@ describe("TasksService.updateTask", () => {
     await buildService(repository, createPermissions(["task:update:own"])).updateTask(
       OWNER_ID,
       "task-1",
-      { title: "New title", ownerId: OTHER_USER_ID },
+      { title: "New title", ownerId: OTHER_USER_ID, version: 1 },
     );
 
     const call = repository.update.mock.calls[0];
     if (!call) {
       throw new Error("expected repository.update to have been called");
     }
-    expect(call[1].ownerId).toBeUndefined();
+    expect(call[2].ownerId).toBeUndefined();
   });
 
   it("honors ownerId in the update when the caller holds task:update:any", async () => {
@@ -306,11 +307,12 @@ describe("TasksService.updateTask", () => {
     await buildService(repository, createPermissions(["task:update:any"])).updateTask(
       OWNER_ID,
       "task-1",
-      { ownerId: OTHER_USER_ID },
+      { ownerId: OTHER_USER_ID, version: 1 },
     );
 
     expect(repository.update).toHaveBeenCalledWith(
       "task-1",
+      1,
       expect.objectContaining({ ownerId: OTHER_USER_ID }),
     );
   });
@@ -322,13 +324,46 @@ describe("TasksService.updateTask", () => {
     await buildService(repository, createPermissions(["task:update:own"])).updateTask(
       OWNER_ID,
       "task-1",
-      { dueDate: NOW.toISOString() },
+      { dueDate: NOW.toISOString(), version: 1 },
     );
 
     expect(repository.update).toHaveBeenCalledWith(
       "task-1",
+      1,
       expect.objectContaining({ dueDate: NOW }),
     );
+  });
+
+  it("passes the input's version through to the repository as expectedVersion", async () => {
+    const repository = createTasksRepository();
+    repository.findById.mockResolvedValue(buildTask({ ownerId: OWNER_ID }));
+
+    await buildService(repository, createPermissions(["task:update:own"])).updateTask(
+      OWNER_ID,
+      "task-1",
+      { title: "New title", version: 3 },
+    );
+
+    const call = repository.update.mock.calls[0];
+    if (!call) {
+      throw new Error("expected repository.update to have been called");
+    }
+    expect(call[1]).toBe(3);
+    expect(call[2]).not.toHaveProperty("version");
+  });
+
+  it("throws ConflictError when the repository reports a stale version", async () => {
+    const repository = createTasksRepository();
+    repository.findById.mockResolvedValue(buildTask({ ownerId: OWNER_ID }));
+    repository.update.mockResolvedValue(null);
+
+    await expect(
+      buildService(repository, createPermissions(["task:update:own"])).updateTask(
+        OWNER_ID,
+        "task-1",
+        { title: "New title", version: 1 },
+      ),
+    ).rejects.toThrow(ConflictError);
   });
 
   it("emits task.updated after a successful update", async () => {
@@ -340,7 +375,7 @@ describe("TasksService.updateTask", () => {
       repository,
       createPermissions(["task:update:own"]),
       events,
-    ).updateTask(OWNER_ID, "task-1", { title: "New title" });
+    ).updateTask(OWNER_ID, "task-1", { title: "New title", version: 1 });
 
     expect(events.emit).toHaveBeenCalledWith("task.updated", updated);
   });

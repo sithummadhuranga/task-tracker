@@ -107,8 +107,21 @@ pnpm turbo run lint
 pnpm turbo run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs all three on every push and pull request, against real
-Postgres and Redis service containers — nothing merges without passing.
+CI (`.github/workflows/ci.yml`) runs all three on every push to `main`/`develop` and on every
+pull request (any source branch), against real Postgres and Redis service containers — nothing
+merges without passing.
+
+## API Reference (Postman)
+
+`postman/task-tracker.postman_collection.json` covers every endpoint in this API, organized
+into Health, Auth, Admin, RBAC Administration, Users, and Tasks folders. Import it alongside
+`postman/task-tracker.postman_environment.json` (select that environment in Postman), set
+`adminEmail`/`adminPassword` to your `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD`, then run
+Auth > Register, Auth > Login, and Admin > Login as Admin in that order — access tokens and the
+ids needed to chain later requests (`userId`, `roleId`, `taskId`, `permissionOverrideId`) are
+captured automatically via each request's test script. The refresh token is a cookie, handled
+by Postman's own cookie jar. Each request's description explains its permission requirement and
+any locked, non-obvious behavior (ownership masking, no-op renames, etc.).
 
 ## Deployment
 
@@ -158,16 +171,36 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
   carries permission data, so a revoked permission takes effect immediately rather than waiting
   for token expiry.
 - Past due dates are allowed on task creation — a task can be created already overdue.
-- Tasks are hard-deleted in v1; no soft-delete or audit trail.
+- Tasks are soft-deleted (`deletedAt`, never exposed in API responses); no audit trail of who
+  deleted what or when.
 - Registration always assigns the `USER` role — role is never client-controlled, even if sent
   in the request body.
 - `/auth/login` and `/auth/register` are rate-limited to 10 requests per IP per 15-minute
   window (Redis-backed, so the limit holds across instances). Chosen as a reasonable default
   to block brute-force/credential-stuffing without a documented threshold requirement.
+- Refresh token rotation's read-then-tombstone step runs as a single Redis `EVAL` (Lua), not a
+  plain `GET` followed by a separate `SET` — otherwise two concurrent presenters of the same
+  stolen token could both read "active" before either wrote the "rotated" marker, letting a
+  replay slip past reuse detection.
+- Logging out of all sessions (`/auth/logout-all`, and the admin
+  `/users/:id/logout-all`) also force-disconnects that user's live WebSocket connections, not
+  just their Redis-backed refresh sessions — a handshake's access token is otherwise checked
+  once, at connect time, so an open socket would otherwise keep receiving task events for up to
+  its remaining 15-minute lifetime after a revoke.
+- `PATCH /tasks/:id` requires a `version` field (optimistic concurrency) — every Task carries an
+  integer `version`, incremented on each successful update. The caller must echo back the
+  version it last read; a stale value returns `409 Conflict` instead of silently overwriting a
+  concurrent edit. Multi-statement Postgres writes elsewhere (user registration's role
+  assignment, role-permission replacement, user-role replacement) already run inside
+  `prisma.$transaction` for atomicity; Redis-side bookkeeping (permission cache, session/role
+  indexes) is necessarily outside that transaction — a distributed transaction across Postgres
+  and Redis isn't worth the complexity at this scale, and any divergence self-heals within the
+  permission cache's 60-second TTL without ever granting access beyond what Postgres allows.
 
 ## Future Improvements
 
-- Soft-delete / audit log for tasks (explicitly out of scope for v1).
+- Audit log for tasks — who deleted/changed what, and when (soft-delete itself is implemented;
+  a queryable history of deletions is not).
 - Persisted audit trail + admin UI for RBAC changes. Pino request logging (added for Issue 4 of
   the security review) is operational logging only — JSON to stdout, not the database, and not
   a substitute for this. A real implementation would need: an `AuditLog` table (`actorUserId`,
@@ -188,3 +221,11 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
   that the running server never uses.
 - Automated GHCR image cleanup — old image digests accumulate in the package's version history
   with no retention policy configured yet.
+- Kanban board drag-and-drop uses the native HTML5 Drag and Drop API rather than a library —
+  deliberate, to avoid an undeclared dependency for a simple 3-column cross-drop interaction, but
+  it does not work on touch/mobile browsers at all. Degrades gracefully today (the task detail
+  view's status control is a fully working fallback), but a real mobile-friendly board would need
+  a pointer-event-based library (e.g. dnd-kit) instead.
+- The List/Board view toggle on the tasks page is local component state, not persisted — a page
+  refresh always lands back on List. Persisting the last-used view (URL query param or
+  localStorage) would be a small, low-risk addition.

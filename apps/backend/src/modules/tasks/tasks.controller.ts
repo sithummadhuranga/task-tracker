@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { getAuthenticatedUser } from "../../common/middleware/authenticate.js";
+import { buildPaginationMeta } from "../../common/pagination.js";
 import type { CreateTaskInput, TaskListQuery, UpdateTaskInput } from "./tasks.dto.js";
 import { tasksService } from "./tasks.service.js";
 
@@ -23,18 +24,15 @@ export async function getTask(req: Request<{ id: string }>, res: Response): Prom
 export async function listTasks(req: Request, res: Response): Promise<void> {
   const { id: callerId } = getAuthenticatedUser(req);
   // validate() has already replaced req.query with the coerced-and-defaulted TaskListQuery
-  // shape by the time this handler runs.
+  // shape by the time this handler runs. Express's ReqQuery generic requires extends ParsedQs
+  // (string-only values), which this coerced shape (numbers, literal unions) doesn't satisfy,
+  // so a cast here is the pragmatic option, not a typed-generics one.
   const query = req.query as unknown as TaskListQuery;
   const { tasks, total } = await tasksService.listTasks(callerId, query);
 
   res.status(200).json({
     data: tasks,
-    meta: {
-      page: query.page,
-      limit: query.limit,
-      total,
-      totalPages: Math.ceil(total / query.limit),
-    },
+    meta: buildPaginationMeta(query.page, query.limit, total),
   });
 }
 

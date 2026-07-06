@@ -25,12 +25,16 @@ export const createTaskSchema = z.object({
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
+// version is required, not optional — it's the caller's optimistic-concurrency check-in, the
+// exact value last read from a GET/list/create/update response. Making it skippable would let a
+// client silently opt out of the conflict check the field exists to enforce.
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   status: z.enum(TASK_STATUSES).optional(),
   dueDate: z.iso.datetime().optional(),
   ownerId: z.uuid().optional(),
+  version: z.number().int().min(1),
 });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 

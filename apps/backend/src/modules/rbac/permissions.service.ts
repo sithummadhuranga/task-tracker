@@ -16,7 +16,7 @@ const EMPTY_RESULT_SENTINEL = "__EMPTY__";
 
 export type PermissionsRedisClient = Pick<
   Redis,
-  "smembers" | "sadd" | "srem" | "expire" | "del"
+  "smembers" | "sadd" | "srem" | "expire" | "del" | "multi"
 >;
 
 function cacheKey(userId: string): string {
@@ -59,8 +59,15 @@ export class PermissionsService {
 
     const result = [...effective];
 
-    await this.redis.sadd(key, ...(result.length > 0 ? result : [EMPTY_RESULT_SENTINEL]));
-    await this.redis.expire(key, CACHE_TTL_SECONDS);
+    // A crash between a separate SADD and EXPIRE would leave the key with members but no TTL —
+    // it would then never expire, serving this snapshot forever instead of the intended 60s
+    // cache. MULTI/EXEC runs both as one atomic unit, so there's no window where one has landed
+    // without the other.
+    await this.redis
+      .multi()
+      .sadd(key, ...(result.length > 0 ? result : [EMPTY_RESULT_SENTINEL]))
+      .expire(key, CACHE_TTL_SECONDS)
+      .exec();
 
     return result;
   }

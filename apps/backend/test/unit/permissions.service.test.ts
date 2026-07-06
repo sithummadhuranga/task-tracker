@@ -16,13 +16,31 @@ function createRepository(sources: PermissionSources, catalog: PermissionCatalog
   return { repository, getPermissionSources, listCatalog };
 }
 
-function createRedis(cached: string[] = []): PermissionsRedisClient {
+interface FakeMulti {
+  sadd: jest.Mock;
+  expire: jest.Mock;
+  exec: jest.Mock;
+}
+
+function createChainableMulti(): FakeMulti {
+  const chain = {} as FakeMulti;
+  chain.sadd = jest.fn(() => chain);
+  chain.expire = jest.fn(() => chain);
+  chain.exec = jest.fn(() => Promise.resolve([]));
+  return chain;
+}
+
+function createRedis(cached: string[] = []): PermissionsRedisClient & { multiChain: FakeMulti } {
+  const multiChain = createChainableMulti();
+
   return {
     smembers: jest.fn(() => Promise.resolve(cached)),
     sadd: jest.fn(() => Promise.resolve(1)),
     srem: jest.fn(() => Promise.resolve(1)),
     expire: jest.fn(() => Promise.resolve(1)),
     del: jest.fn(() => Promise.resolve(1)),
+    multi: jest.fn(() => multiChain) as unknown as PermissionsRedisClient["multi"],
+    multiChain,
   };
 }
 
@@ -105,15 +123,17 @@ describe("PermissionsService.resolveEffectivePermissions", () => {
     expect(result).toEqual([]);
   });
 
-  it("caches a non-empty result with the 60s TTL", async () => {
+  it("caches a non-empty result with the 60s TTL, atomically via MULTI/EXEC", async () => {
     const { repository } = createRepository({ roleKeys: ["task:create"], overrides: [] });
     const redis = createRedis();
     const service = new PermissionsService(repository, redis);
 
     await service.resolveEffectivePermissions("user-1");
 
-    expect(redis.sadd).toHaveBeenCalledWith("permissions:user-1", "task:create");
-    expect(redis.expire).toHaveBeenCalledWith("permissions:user-1", 60);
+    expect(redis.multi).toHaveBeenCalledTimes(1);
+    expect(redis.multiChain.sadd).toHaveBeenCalledWith("permissions:user-1", "task:create");
+    expect(redis.multiChain.expire).toHaveBeenCalledWith("permissions:user-1", 60);
+    expect(redis.multiChain.exec).toHaveBeenCalledTimes(1);
   });
 
   it("caches a genuinely-empty result via a sentinel, so a zero-permission user still hits the cache", async () => {
@@ -124,8 +144,8 @@ describe("PermissionsService.resolveEffectivePermissions", () => {
     const result = await service.resolveEffectivePermissions("user-1");
 
     expect(result).toEqual([]);
-    expect(redis.sadd).toHaveBeenCalledWith("permissions:user-1", "__EMPTY__");
-    expect(redis.expire).toHaveBeenCalledWith("permissions:user-1", 60);
+    expect(redis.multiChain.sadd).toHaveBeenCalledWith("permissions:user-1", "__EMPTY__");
+    expect(redis.multiChain.expire).toHaveBeenCalledWith("permissions:user-1", 60);
   });
 
   it("returns [] (not the sentinel) when the cached result is the empty marker", async () => {

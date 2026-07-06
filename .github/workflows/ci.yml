@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main, develop]
   pull_request:
 
 concurrency:
@@ -18,7 +19,9 @@ env:
   # for the actual test run; this covers the standalone "Seed RBAC catalog" step, which runs
   # the seed script directly, outside Jest.
   JWT_ACCESS_SECRET: test-only-secret-value-not-used-in-production-00000000
-  ADMIN_SEED_EMAIL: test-admin@example.com
+  # Matches test/setup-env.js's own fallback exactly — one canonical test-admin identity,
+  # not two independently-drifting literals, is what actually closes the gap Issue 23 flagged.
+  ADMIN_SEED_EMAIL: admin@test-tasktracker.local
   ADMIN_SEED_PASSWORD: test-only-admin-password-1
 
 jobs:
@@ -159,6 +162,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        # The default "docker" driver can't export a GHA cache (cache-to: type=gha below) —
+        # only the "docker-container" driver this action creates supports it.
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push backend image
         id: push
         uses: docker/build-push-action@v6
@@ -166,7 +174,11 @@ jobs:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:latest
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to DigitalOcean App Platform
         uses: digitalocean/app_action/deploy@v2
@@ -245,6 +257,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        # The default "docker" driver can't export a GHA cache (cache-to: type=gha below) —
+        # only the "docker-container" driver this action creates supports it.
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push backend image
         id: push
         uses: docker/build-push-action@v6
@@ -252,7 +269,11 @@ jobs:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:latest
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to DigitalOcean App Platform
         uses: digitalocean/app_action/deploy@v2
