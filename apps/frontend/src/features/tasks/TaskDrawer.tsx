@@ -161,6 +161,7 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
     mutationFn: () => magicPolishTask({ title: draft.title.trim(), description: draft.description.trim() }),
     onSuccess: (result) => {
       setDraft((prev) => ({ ...prev, title: result.title, description: result.description }));
+      toast.success("Description polished");
     },
     onError: (error: unknown) => {
       toast.error(errorMessage(error));
