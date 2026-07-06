@@ -162,6 +162,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        # The default "docker" driver can't export a GHA cache (cache-to: type=gha below) —
+        # only the "docker-container" driver this action creates supports it.
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push backend image
         id: push
         uses: docker/build-push-action@v6
@@ -251,6 +256,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        # The default "docker" driver can't export a GHA cache (cache-to: type=gha below) —
+        # only the "docker-container" driver this action creates supports it.
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push backend image
         id: push
