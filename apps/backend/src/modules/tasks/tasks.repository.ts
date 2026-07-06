@@ -53,8 +53,8 @@ export interface TasksRepository {
 }
 
 // Deliberately excludes deletedAt — an internal soft-delete marker, never part of the public
-// Task shape in docs/FEATURES_AND_API.md, so every query selects exactly this rather than
-// relying on TaskRecord's type to hide a field Prisma would otherwise return at runtime.
+// Task shape, so every query selects exactly this rather than relying on TaskRecord's type to
+// hide a field Prisma would otherwise return at runtime.
 const TASK_SELECT = {
   id: true,
   title: true,

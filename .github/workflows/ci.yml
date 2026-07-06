@@ -189,6 +189,9 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          # Optional — an unset secret resolves to an empty string here, which env.ts's
+          # GEMINI_API_KEY transform treats the same as absent. Deploys are never blocked on it.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           app_spec_location: .do/app.staging.yaml
@@ -284,6 +287,9 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          # Optional — an unset secret resolves to an empty string here, which env.ts's
+          # GEMINI_API_KEY transform treats the same as absent. Deploys are never blocked on it.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           app_spec_location: .do/app.production.yaml

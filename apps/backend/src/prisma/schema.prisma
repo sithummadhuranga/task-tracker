@@ -89,9 +89,9 @@ model UserPermission {
 
 model Task {
   id          String     @id @default(uuid())
-  // Mirrors the DTO's Zod limits (docs/FEATURES_AND_API.md) at the column level too — Zod only
-  // guards the API surface, and a direct DB write (a script, a future admin tool, a migration
-  // bug) would otherwise accept an arbitrarily long value with no schema-level backstop.
+  // Mirrors the DTO's Zod limits at the column level too — Zod only guards the API surface,
+  // and a direct DB write (a script, a future admin tool, a migration bug) would otherwise
+  // accept an arbitrarily long value with no schema-level backstop.
   title       String     @db.VarChar(200)
   description String?    @db.VarChar(2000)
   status      TaskStatus @default(TODO)

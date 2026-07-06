@@ -17,11 +17,10 @@ const idsList = z
   .string()
   .transform((value) => value.split(",").map((id) => id.trim()).filter(Boolean));
 
-// Not in docs/FEATURES_AND_API.md's original locked contract — added with explicit user
-// sign-off to let the frontend resolve a task's ownerId to a display name, since the Task
-// response only ever carries the raw id. Exactly one of ids/q is required: ids resolves known
-// owners for display (task:read:any OR user:manage), q powers the owner search-as-you-type
-// picker in the task form.
+// Not in the original locked contract — added with explicit user sign-off to let the frontend
+// resolve a task's ownerId to a display name, since the Task response only ever carries the raw
+// id. Exactly one of ids/q is required: ids resolves known owners for display (task:read:any OR
+// user:manage), q powers the owner search-as-you-type picker in the task form.
 export const userLookupQuerySchema = z
   .object({
     ids: idsList.optional(),

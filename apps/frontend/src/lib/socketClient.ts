@@ -35,10 +35,10 @@ export function disconnectTaskSocket(): void {
   socket?.disconnect();
 }
 
-// docs/FEATURES_AND_API.md §6 documents the wire payload as `{ event, task }`, but also names
-// this exact ambiguity: the backend may instead pass the bare task object directly, since the
-// Socket.io event name (`task.created`, etc.) already encodes what `event` would say. Handling
-// both shapes here is the one place this client adapts defensively rather than assuming.
+// The documented wire payload is `{ event, task }`, but the backend may instead pass the bare
+// task object directly, since the Socket.io event name (`task.created`, etc.) already encodes
+// what `event` would say. Handling both shapes here is the one place this client adapts
+// defensively rather than assuming.
 function extractTask(payload: unknown): TaskEventTask | null {
   if (!payload || typeof payload !== "object") {
     return null;

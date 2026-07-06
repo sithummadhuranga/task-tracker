@@ -1,6 +1,6 @@
 import { TASK_STATUSES, type TaskStatus } from "@task-tracker/shared-types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Sparkles } from "lucide-react";
 import { useRef, useState, type SubmitEvent } from "react";
 import { toast } from "sonner";
 import { Drawer } from "../../components/ui/Drawer";
@@ -13,7 +13,15 @@ import { OwnerPicker } from "./OwnerPicker";
 import { STATUS_LABEL, fromDatetimeLocalValue, toDatetimeLocalValue } from "./taskFormatting";
 import { canEditTask } from "./taskPermissions";
 import { TaskDetailView } from "./TaskDetailView";
-import { createTask, fetchTask, updateTask, type CreateTaskBody, type Task, type UpdateTaskBody } from "./tasks.api";
+import {
+  createTask,
+  fetchTask,
+  magicPolishTask,
+  updateTask,
+  type CreateTaskBody,
+  type Task,
+  type UpdateTaskBody,
+} from "./tasks.api";
 
 export type TaskDrawerTarget = { mode: "create" } | { mode: "edit"; taskId: string } | null;
 
@@ -149,10 +157,21 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
     },
   });
 
+  const magicPolishMutation = useMutation({
+    mutationFn: () => magicPolishTask({ title: draft.title.trim(), description: draft.description.trim() }),
+    onSuccess: (result) => {
+      setDraft((prev) => ({ ...prev, title: result.title, description: result.description }));
+    },
+    onError: (error: unknown) => {
+      toast.error(errorMessage(error));
+    },
+  });
+
   const canSetOwnerOnCreate = hasPermission("task:read:any");
   const canSetOwnerOnEdit = hasPermission("task:update:any");
   const showOwnerField = target?.mode === "create" ? canSetOwnerOnCreate : canSetOwnerOnEdit;
   const isPending = createMutation.isPending || updateMutation.isPending;
+  const canMagicPolish = draft.title.trim().length > 0 && !isPending;
   const isNotFound =
     target?.mode === "edit" &&
     detailQuery.isError &&
@@ -245,9 +264,22 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
           </div>
 
           <div>
-            <label htmlFor="task-description" className="mb-1.5 block text-sm font-medium text-ink">
-              Description
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label htmlFor="task-description" className="block text-sm font-medium text-ink">
+                Description
+              </label>
+              <button
+                type="button"
+                disabled={!canMagicPolish || magicPolishMutation.isPending}
+                onClick={() => {
+                  magicPolishMutation.mutate();
+                }}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {magicPolishMutation.isPending ? "Polishing..." : "Magic Polish"}
+              </button>
+            </div>
             <textarea
               id="task-description"
               value={draft.description}
