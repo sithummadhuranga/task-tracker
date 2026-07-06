@@ -248,6 +248,19 @@ describe(`GET ${TASKS_BASE}`, () => {
     expect(body.data.every((task) => task.ownerId === owner.userId)).toBe(true);
   });
 
+  it("returns totalPages: 1, not 0, for a caller with no tasks", async () => {
+    const owner = await createZeroPermissionUser("list-empty");
+
+    const response = await request(app)
+      .get(TASKS_BASE)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+
+    expect(response.status).toBe(200);
+    const body = response.body as PaginatedTasksBody;
+    expect(body.meta.total).toBe(0);
+    expect(body.meta.totalPages).toBe(1);
+  });
+
   it("forces the ownerId filter to the caller even when a different ownerId is requested", async () => {
     const owner = await createUserWithPermissions(["task:create", "task:read:own"], "list-forced-owner");
     await request(app)
@@ -464,6 +477,32 @@ describe(`DELETE ${TASKS_BASE}/:id`, () => {
       .get(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${owner.accessToken}`);
     expect(getAfterDelete.status).toBe(404);
+  });
+
+  it("soft-deletes: the row still exists with deletedAt set, and it drops out of the list", async () => {
+    const owner = await createUserWithPermissions(
+      ["task:create", "task:read:own", "task:delete:own"],
+      "delete-soft",
+    );
+    const created = await request(app)
+      .post(TASKS_BASE)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send(createTaskPayload());
+    const taskId = (created.body as TaskBody).id;
+
+    await request(app)
+      .delete(`${TASKS_BASE}/${taskId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+
+    const rawRow = await prisma.task.findUnique({ where: { id: taskId } });
+    expect(rawRow).not.toBeNull();
+    expect(rawRow?.deletedAt).not.toBeNull();
+
+    const listResponse = await request(app)
+      .get(TASKS_BASE)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+    const listBody = listResponse.body as PaginatedTasksBody;
+    expect(listBody.data.some((task) => task.id === taskId)).toBe(false);
   });
 
   it("masks another user's task as 404 for a caller with only task:delete:own", async () => {

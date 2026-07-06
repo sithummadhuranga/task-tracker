@@ -107,4 +107,11 @@ describe("App routing", () => {
 
     expect(await screen.findByRole("heading", { name: "Admin" })).toBeInTheDocument();
   });
+
+  it("renders a 404 page for an unknown route instead of a blank screen", async () => {
+    refreshAccessTokenMock.mockResolvedValue(false);
+    renderAt("/this-page-does-not-exist");
+
+    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+  });
 });

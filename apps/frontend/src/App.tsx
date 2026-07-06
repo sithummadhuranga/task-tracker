@@ -5,6 +5,7 @@ import { RegisterPage } from "./features/auth/RegisterPage";
 import { RequireAuth } from "./features/auth/RequireAuth";
 import { RequirePermission } from "./features/auth/RequirePermission";
 import { HomePage } from "./features/tasks/HomePage";
+import { NotFoundPage } from "./NotFoundPage";
 
 export function App() {
   return (
@@ -37,6 +38,7 @@ export function App() {
       />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

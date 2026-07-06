@@ -138,8 +138,39 @@ describe("HomePage", () => {
       `/tasks/${task.id}`,
     );
 
-    expect(await screen.findByRole("heading", { name: "Edit task" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Deep-linked task")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Task details" })).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("Deep-linked task")).toBeInTheDocument();
+  });
+
+  it("hides the status filter and shows board columns when toggled to Board", async () => {
+    renderHomePage(["task:create", "task:read:any"], () => taskPage([]));
+
+    await screen.findByText("No tasks match these filters.");
+    expect(screen.getByLabelText("Status")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Board" }));
+
+    expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("To do column")).toBeInTheDocument();
+    expect(screen.getByLabelText("In progress column")).toBeInTheDocument();
+    expect(screen.getByLabelText("Done column")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("returns to the table and pagination when toggled back to List", async () => {
+    renderHomePage(["task:create", "task:read:own"], () => taskPage([makeTask()]));
+
+    await screen.findByText("Write report");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Board" }));
+    await screen.findByLabelText("To do column");
+
+    await user.click(screen.getByRole("tab", { name: "List" }));
+
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toBeInTheDocument();
   });
 
   it("navigates back to / when the drawer opened from a route param is closed", async () => {
@@ -150,11 +181,11 @@ describe("HomePage", () => {
       `/tasks/${task.id}`,
     );
 
-    await screen.findByRole("heading", { name: "Edit task" });
+    await screen.findByRole("heading", { name: "Task details" });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Close panel" }));
 
-    expect(screen.queryByRole("heading", { name: "Edit task" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Task details" })).not.toBeInTheDocument();
   });
 });

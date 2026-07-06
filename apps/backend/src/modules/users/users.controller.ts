@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { buildPaginationMeta } from "../../common/pagination.js";
 import type { ListUsersQuery, UpsertPermissionOverrideInput, UserLookupQuery } from "./users.dto.js";
 import { usersService } from "./users.service.js";
 
@@ -10,7 +11,7 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
 
   res.status(200).json({
     data: users,
-    meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    meta: buildPaginationMeta(page, limit, total),
   });
 }
 

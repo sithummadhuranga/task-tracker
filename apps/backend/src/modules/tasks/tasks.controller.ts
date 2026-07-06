@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { getAuthenticatedUser } from "../../common/middleware/authenticate.js";
+import { buildPaginationMeta } from "../../common/pagination.js";
 import type { CreateTaskInput, TaskListQuery, UpdateTaskInput } from "./tasks.dto.js";
 import { tasksService } from "./tasks.service.js";
 
@@ -29,12 +30,7 @@ export async function listTasks(req: Request, res: Response): Promise<void> {
 
   res.status(200).json({
     data: tasks,
-    meta: {
-      page: query.page,
-      limit: query.limit,
-      total,
-      totalPages: Math.ceil(total / query.limit),
-    },
+    meta: buildPaginationMeta(query.page, query.limit, total),
   });
 }
 

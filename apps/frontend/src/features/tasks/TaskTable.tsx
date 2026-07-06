@@ -1,4 +1,4 @@
-import { Calendar, Pencil, Trash2 } from "lucide-react";
+import { Calendar, Trash2 } from "lucide-react";
 import { STATUS_BADGE_CLASSES, STATUS_LABEL, formatDueDate } from "./taskFormatting";
 import type { Task } from "./tasks.api";
 import { useOwnerNames } from "./useOwnerNames";
@@ -7,9 +7,8 @@ interface TaskTableProps {
   tasks: Task[];
   showOwnerColumn: boolean;
   currentUserId: string | undefined;
-  canEdit: (task: Task) => boolean;
   canDelete: (task: Task) => boolean;
-  onEdit: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
   onDeleteRequest: (task: Task) => void;
 }
 
@@ -17,9 +16,8 @@ export function TaskTable({
   tasks,
   showOwnerColumn,
   currentUserId,
-  canEdit,
   canDelete,
-  onEdit,
+  onOpenTask,
   onDeleteRequest,
 }: TaskTableProps) {
   const columnCount = showOwnerColumn ? 5 : 4;
@@ -45,7 +43,22 @@ export function TaskTable({
           </tr>
         )}
         {tasks.map((task) => (
-          <tr key={task.id}>
+          <tr
+            key={task.id}
+            tabIndex={0}
+            role="button"
+            aria-label={`View "${task.title}"`}
+            onClick={() => {
+              onOpenTask(task);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpenTask(task);
+              }
+            }}
+            className="cursor-pointer hover:bg-surface-2/60"
+          >
             <td className="border-b border-border py-3 pr-4 align-middle font-medium text-ink">{task.title}</td>
             <td className="border-b border-border py-3 pr-4 align-middle">
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE_CLASSES[task.status]}`}>
@@ -65,22 +78,11 @@ export function TaskTable({
             )}
             <td className="border-b border-border py-3 pr-4 text-right align-middle">
               <div className="flex justify-end gap-1">
-                {canEdit(task) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onEdit(task);
-                    }}
-                    aria-label={`Edit "${task.title}"`}
-                    className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                )}
                 {canDelete(task) && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       onDeleteRequest(task);
                     }}
                     aria-label={`Delete "${task.title}"`}

@@ -158,7 +158,8 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
   carries permission data, so a revoked permission takes effect immediately rather than waiting
   for token expiry.
 - Past due dates are allowed on task creation — a task can be created already overdue.
-- Tasks are hard-deleted in v1; no soft-delete or audit trail.
+- Tasks are soft-deleted (`deletedAt`, never exposed in API responses); no audit trail of who
+  deleted what or when.
 - Registration always assigns the `USER` role — role is never client-controlled, even if sent
   in the request body.
 - `/auth/login` and `/auth/register` are rate-limited to 10 requests per IP per 15-minute
@@ -167,7 +168,8 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
 
 ## Future Improvements
 
-- Soft-delete / audit log for tasks (explicitly out of scope for v1).
+- Audit log for tasks — who deleted/changed what, and when (soft-delete itself is implemented;
+  a queryable history of deletions is not).
 - Persisted audit trail + admin UI for RBAC changes. Pino request logging (added for Issue 4 of
   the security review) is operational logging only — JSON to stdout, not the database, and not
   a substitute for this. A real implementation would need: an `AuditLog` table (`actorUserId`,
@@ -188,3 +190,11 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
   that the running server never uses.
 - Automated GHCR image cleanup — old image digests accumulate in the package's version history
   with no retention policy configured yet.
+- Kanban board drag-and-drop uses the native HTML5 Drag and Drop API rather than a library —
+  deliberate, to avoid an undeclared dependency for a simple 3-column cross-drop interaction, but
+  it does not work on touch/mobile browsers at all. Degrades gracefully today (the task detail
+  view's status control is a fully working fallback), but a real mobile-friendly board would need
+  a pointer-event-based library (e.g. dnd-kit) instead.
+- The List/Board view toggle on the tasks page is local component state, not persisted — a page
+  refresh always lands back on List. Persisting the last-used view (URL query param or
+  localStorage) would be a small, low-risk addition.

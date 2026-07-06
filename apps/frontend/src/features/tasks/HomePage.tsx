@@ -10,6 +10,8 @@ import { InlineError } from "../../components/ui/InlineError";
 import { TableSkeleton } from "../../components/ui/TableSkeleton";
 import { errorMessage } from "../../lib/errorMessage";
 import { useAuth } from "../auth/AuthContext";
+import { KanbanBoard } from "./KanbanBoard";
+import { canDeleteTask, canEditTask } from "./taskPermissions";
 import { TaskDrawer, type TaskDrawerTarget } from "./TaskDrawer";
 import { TaskFilters } from "./TaskFilters";
 import { TaskTable } from "./TaskTable";
@@ -17,6 +19,7 @@ import { deleteTask, fetchTasks, type Task } from "./tasks.api";
 import { useTaskRealtimeSync } from "./useTaskRealtimeSync";
 
 const PAGE_SIZE = 10;
+type ViewMode = "list" | "board";
 
 export function HomePage() {
   const { user, hasPermission } = useAuth();
@@ -32,6 +35,9 @@ export function HomePage() {
   const [ownerId, setOwnerId] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskPendingDelete, setTaskPendingDelete] = useState<Task | null>(null);
+  // Local-only, not URL-persisted — a page refresh always lands back on List. Documented as a
+  // Future Improvement rather than a silent gap.
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const drawerTarget: TaskDrawerTarget = isCreateOpen
     ? { mode: "create" }
@@ -57,6 +63,7 @@ export function HomePage() {
         status: status || undefined,
         ownerId: canSeeAnyOwner && ownerId ? ownerId : undefined,
       }),
+    enabled: viewMode === "list",
   });
 
   useTaskRealtimeSync(drawerTarget?.mode === "edit" ? drawerTarget.taskId : undefined);
@@ -74,14 +81,16 @@ export function HomePage() {
     },
   });
 
-  function canEditTask(task: Task): boolean {
-    const isOwner = task.ownerId === user?.id;
-    return hasPermission("task:update:any") || (isOwner && hasPermission("task:update:own"));
+  function isTaskEditable(task: Task): boolean {
+    return canEditTask(task, user?.id, hasPermission);
   }
 
-  function canDeleteTask(task: Task): boolean {
-    const isOwner = task.ownerId === user?.id;
-    return hasPermission("task:delete:any") || (isOwner && hasPermission("task:delete:own"));
+  function isTaskDeletable(task: Task): boolean {
+    return canDeleteTask(task, user?.id, hasPermission);
+  }
+
+  function openTask(task: Task): void {
+    void navigate(`/tasks/${task.id}`);
   }
 
   return (
@@ -108,34 +117,75 @@ export function HomePage() {
           )}
         </div>
 
-        <TaskFilters
-          status={status}
-          ownerId={ownerId}
-          canFilterByOwner={canSeeAnyOwner}
-          onApply={(nextStatus, nextOwnerId) => {
-            setStatus(nextStatus);
-            setOwnerId(nextOwnerId);
-            setPage(1);
-          }}
-        />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <TaskFilters
+            status={status}
+            ownerId={ownerId}
+            canFilterByOwner={canSeeAnyOwner}
+            showStatusFilter={viewMode === "list"}
+            onApply={(nextStatus, nextOwnerId) => {
+              setStatus(nextStatus);
+              setOwnerId(nextOwnerId);
+              setPage(1);
+            }}
+          />
 
-        {tasksQuery.isPending && <TableSkeleton rows={PAGE_SIZE} columns={canSeeAnyOwner ? 4 : 3} />}
+          <div className="flex shrink-0 gap-1 rounded-xl border border-border p-1" role="tablist" aria-label="Task view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "list"}
+              onClick={() => {
+                setViewMode("list");
+              }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "list" ? "bg-primary/15 text-primary" : "text-muted hover:bg-surface-2 hover:text-ink"
+              }`}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "board"}
+              onClick={() => {
+                setViewMode("board");
+              }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "board" ? "bg-primary/15 text-primary" : "text-muted hover:bg-surface-2 hover:text-ink"
+              }`}
+            >
+              Board
+            </button>
+          </div>
+        </div>
 
-        {tasksQuery.isError && (
+        {viewMode === "board" && (
+          <KanbanBoard
+            ownerId={ownerId}
+            showOwnerColumn={canSeeAnyOwner}
+            currentUserId={user?.id}
+            canEditTaskFn={isTaskEditable}
+            onOpenTask={openTask}
+          />
+        )}
+
+        {viewMode === "list" && tasksQuery.isPending && (
+          <TableSkeleton rows={PAGE_SIZE} columns={canSeeAnyOwner ? 4 : 3} />
+        )}
+
+        {viewMode === "list" && tasksQuery.isError && (
           <InlineError message="Couldn't load tasks." onRetry={() => void tasksQuery.refetch()} />
         )}
 
-        {tasksQuery.data && (
+        {viewMode === "list" && tasksQuery.data && (
           <div className="space-y-4">
             <TaskTable
               tasks={tasksQuery.data.data}
               showOwnerColumn={canSeeAnyOwner}
               currentUserId={user?.id}
-              canEdit={canEditTask}
-              canDelete={canDeleteTask}
-              onEdit={(task) => {
-                void navigate(`/tasks/${task.id}`);
-              }}
+              canDelete={isTaskDeletable}
+              onOpenTask={openTask}
               onDeleteRequest={(task) => {
                 setTaskPendingDelete(task);
               }}
@@ -160,7 +210,7 @@ export function HomePage() {
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <span className="px-2">
-                  Page {tasksQuery.data.meta.page} of {Math.max(tasksQuery.data.meta.totalPages, 1)}
+                  Page {tasksQuery.data.meta.page} of {tasksQuery.data.meta.totalPages}
                 </span>
                 <button
                   type="button"
