@@ -24,6 +24,7 @@ describe("parseEnv", () => {
 
     expect(env.PORT).toBe(4000);
     expect(env.NODE_ENV).toBe("development");
+    expect(env.LOG_LEVEL).toBe("info");
   });
 
   it("throws a clear, actionable error when a required var is missing", () => {

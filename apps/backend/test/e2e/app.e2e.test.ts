@@ -27,6 +27,16 @@ describe("security middleware", () => {
     expect(response.headers).toHaveProperty("content-security-policy");
   });
 
+  it("stamps every response with a unique x-request-id for log correlation", async () => {
+    const [first, second] = await Promise.all([
+      request(app).get("/health"),
+      request(app).get("/health"),
+    ]);
+
+    expect(first.headers["x-request-id"]).toEqual(expect.any(String));
+    expect(first.headers["x-request-id"]).not.toBe(second.headers["x-request-id"]);
+  });
+
   it("rejects a JSON body over the configured size limit with 413, not a generic 500", async () => {
     const oversizedBody = JSON.stringify({ description: "x".repeat(20_000) });
 

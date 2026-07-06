@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
 import { PERMISSION_KEYS, registerSchema } from "@task-tracker/shared-types";
 import { BCRYPT_COST } from "../common/security/password.js";
+import { logger } from "../common/logging/logger.js";
 import { permissionsService } from "../modules/rbac/permissions.service.js";
 import { prisma } from "./client.js";
 
@@ -15,18 +16,15 @@ export const USER_ROLE_PERMISSIONS = [
 const ADMIN_NAME = "Admin";
 
 async function seedPermissionCatalog() {
-  // update: {} — this only ever creates a missing row, never rewrites an existing one, and
-  // a key removed from the code catalog is simply left alone rather than deleted, since
-  // deleting it would cascade into any RolePermission/UserPermission row still referencing it.
-  await Promise.all(
-    PERMISSION_KEYS.map((key) =>
-      prisma.permission.upsert({
-        where: { key },
-        update: {},
-        create: { key },
-      }),
-    ),
-  );
+  // createMany + skipDuplicates, not N concurrent upserts: on a fresh schema those upserts race
+  // each other for the same insert, which Postgres can turn into an intermittent unique-violation
+  // under advisory-lock contention. A single statement is also just cheaper. A key removed from
+  // the code catalog is still simply left alone rather than deleted, since deleting it would
+  // cascade into any RolePermission/UserPermission row still referencing it.
+  await prisma.permission.createMany({
+    data: PERMISSION_KEYS.map((key) => ({ key })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedRole(
@@ -111,11 +109,19 @@ const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMainModule) {
   main()
     .catch((error: unknown) => {
-      console.error(error);
+      logger.error({ err: error }, "seed failed");
       process.exitCode = 1;
     })
     .finally(async () => {
       await prisma.$disconnect();
+      // In development, logger.error above is written by pino-pretty's worker-thread transport,
+      // which process.exit() can cut off mid-write — flush() waits for that line to actually
+      // land before this short-lived script exits.
+      await new Promise<void>((resolve) => {
+        logger.flush(() => {
+          resolve();
+        });
+      });
       process.exit(process.exitCode ?? 0);
     });
 }

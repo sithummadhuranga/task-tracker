@@ -13,3 +13,6 @@ process.env.ADMIN_SEED_PASSWORD ??= "test-only-admin-password-1";
 // dedicated auth-rate-limit unit test builds its own limiter with an explicit low threshold
 // instead of relying on this value, so real 429 behavior still gets exercised.
 process.env.AUTH_RATE_LIMIT_MAX_ATTEMPTS ??= "1000";
+// pino-http logs every request at info level by default — silent keeps CI/local test output
+// readable while still exercising the full logging middleware on every e2e request.
+process.env.LOG_LEVEL ??= "silent";

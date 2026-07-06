@@ -4,6 +4,7 @@ import express, { type Express } from "express";
 import helmet from "helmet";
 import { API_PREFIX } from "./common/config/api-version.js";
 import { env } from "./common/config/env.js";
+import { requestLogger } from "./common/logging/request-logger.js";
 import { errorHandler } from "./common/middleware/error-handler.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { rbacRoutes } from "./modules/rbac/rbac.routes.js";
@@ -24,6 +25,7 @@ export function createApp(): Express {
   // correctly treats as "not 2xx" since it isn't the data the caller asked for.
   app.set("etag", false);
 
+  app.use(requestLogger);
   app.use(helmet());
   app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
   app.use(express.json({ limit: "16kb" }));

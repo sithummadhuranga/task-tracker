@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { createApp } from "./app.js";
 import { env } from "./common/config/env.js";
+import { logger } from "./common/logging/logger.js";
 import { taskEventsEmitter, type TaskSocketServer } from "./websocket/events.js";
 import { registerSocketGateway } from "./websocket/gateway.js";
 
@@ -18,5 +19,5 @@ registerSocketGateway(io);
 taskEventsEmitter.attach(io);
 
 httpServer.listen(env.PORT, () => {
-  console.log(`Backend listening on port ${env.PORT} (${env.NODE_ENV})`);
+  logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, "backend listening");
 });

@@ -161,10 +161,26 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
 - Tasks are hard-deleted in v1; no soft-delete or audit trail.
 - Registration always assigns the `USER` role — role is never client-controlled, even if sent
   in the request body.
+- `/auth/login` and `/auth/register` are rate-limited to 10 requests per IP per 15-minute
+  window (Redis-backed, so the limit holds across instances). Chosen as a reasonable default
+  to block brute-force/credential-stuffing without a documented threshold requirement.
 
 ## Future Improvements
 
 - Soft-delete / audit log for tasks (explicitly out of scope for v1).
+- Persisted audit trail + admin UI for RBAC changes. Pino request logging (added for Issue 4 of
+  the security review) is operational logging only — JSON to stdout, not the database, and not
+  a substitute for this. A real implementation would need: an `AuditLog` table (`actorUserId`,
+  `action` — a closed enum like `ROLE_ASSIGNED`, `PERMISSION_OVERRIDE_SET`,
+  `PERMISSION_OVERRIDE_REMOVED`, `USER_LOGOUT_ALL` — `targetUserId`, a `metadata` JSON column for
+  before/after values, `createdAt`), written from a dedicated `AuditLogService` called at the end
+  of the relevant `UsersService`/`RolesService` methods (never from controllers, per the
+  routes→controller→service→repository layering); a new `audit:read` permission key gating a
+  paginated `GET /admin/audit-log` endpoint (filterable by actor/action/date range); rows are
+  never updated or hard-deleted once written, since a mutable audit record is worthless; and a
+  read-only admin page reusing the existing paginated-table pattern from the Users screen. Not
+  in `docs/FEATURES_AND_API.md`'s locked contract and not required by the assignment brief, so
+  left undone rather than adding an undocumented endpoint/table.
 - Socket.io Redis adapter, if the backend ever needs more than one instance — not needed at the
   current `instance_count: 1` scale, but the Redis dependency for it is already in place.
 - Smaller backend Docker image — `@prisma/client`'s current production install pulls in
