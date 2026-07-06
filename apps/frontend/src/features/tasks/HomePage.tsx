@@ -28,7 +28,7 @@ export function HomePage() {
   // The route param is the single source of truth for the edit drawer, so a task can be
   // deep-linked, shared, refreshed, or reached via browser back/forward — not just opened from
   // a row click in the current session's in-memory state.
-  const { id: routeTaskId } = useParams<{ id: string }>();
+  const { id: routeTaskId } = useParams<{ id?: string }>();
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<TaskStatus | "">("");

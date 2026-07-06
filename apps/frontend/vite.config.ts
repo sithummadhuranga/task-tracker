@@ -14,6 +14,10 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       exclude: [...coverageConfigDefaults.exclude, "src/main.tsx"],
+      // A floor a few points below the current suite, not the current number itself — enough
+      // headroom that a routine change doesn't fail CI on noise, while still catching a real
+      // drop (e.g. a new component landing with no tests at all).
+      thresholds: { statements: 75, branches: 70, functions: 70, lines: 75 },
     },
   },
 });

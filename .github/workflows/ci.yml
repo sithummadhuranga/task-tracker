@@ -169,7 +169,9 @@ jobs:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:latest
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-staging:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -257,7 +259,9 @@ jobs:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:latest
+            ghcr.io/${{ github.repository_owner }}/task-tracker-backend-production:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
