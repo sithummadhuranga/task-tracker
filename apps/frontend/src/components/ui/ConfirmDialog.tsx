@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { promoteToastLayer } from "../../lib/toastLayer";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function ConfirmDialog({
 
     if (isOpen && !dialog.open) {
       dialog.showModal();
+      promoteToastLayer();
     } else if (!isOpen && dialog.open) {
       dialog.close();
     }

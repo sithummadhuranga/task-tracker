@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Toaster } from "sonner";
+import { ToastLayer } from "./components/ui/ToastLayer";
 import { App } from "./App";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { ApiError } from "./lib/apiClient";
@@ -42,21 +42,7 @@ createRoot(rootElement).render(
       <BrowserRouter>
         <AuthProvider>
           <App />
-          <Toaster
-            position="bottom-right"
-            toastOptions={{
-              classNames: {
-                toast:
-                  "!rounded-xl !border !border-border !bg-surface !text-ink !shadow-lg !shadow-black/20",
-                title: "!text-ink !font-medium",
-                description: "!text-muted",
-                actionButton: "!bg-primary !text-primary-ink",
-                cancelButton: "!bg-surface-2 !text-muted",
-                error: "!border-danger/40",
-                success: "!border-success/40",
-              },
-            }}
-          />
+          <ToastLayer />
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
