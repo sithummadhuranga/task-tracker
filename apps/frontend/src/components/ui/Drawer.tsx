@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
+import { promoteToastLayer } from "../../lib/toastLayer";
 
 interface DrawerProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export function Drawer({ isOpen, onClose, title, description, children }: Drawer
 
     if (isOpen && !dialog.open) {
       dialog.showModal();
+      promoteToastLayer();
     } else if (!isOpen && dialog.open) {
       dialog.close();
     }
