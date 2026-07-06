@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
-import { createAuthRateLimiter } from "../../src/common/middleware/auth-rate-limit.js";
 import { errorHandler } from "../../src/common/middleware/error-handler.js";
+import { createRateLimiter } from "../../src/common/middleware/rate-limit.js";
 import { redisClient } from "../../src/common/redis/client.js";
 
 // A throwaway host app around just the limiter under test — the real auth routes share one
@@ -9,7 +9,7 @@ import { redisClient } from "../../src/common/redis/client.js";
 // e2e suite so dozens of unrelated register/login calls don't trip it), so proving the 429
 // boundary itself needs its own small, explicit threshold instead.
 function buildProbeApp(routeKey: string, maxAttempts: number) {
-  const limiter = createAuthRateLimiter({ routeKey, maxAttempts, windowMs: 60_000 });
+  const limiter = createRateLimiter({ routeKey, maxAttempts, windowMs: 60_000 });
   const app = express();
   app.post("/probe", limiter, (_req, res) => {
     res.status(200).json({ ok: true });
@@ -23,7 +23,7 @@ function uniqueRouteKey(label: string): string {
 }
 
 afterAll(async () => {
-  // Each createAuthRateLimiter() call above kicks off its own fire-and-forget Lua script load.
+  // Each createRateLimiter() call above kicks off its own fire-and-forget Lua script load.
   // ping() sits behind all of them in the same FIFO command queue, so awaiting it guarantees
   // those loads have settled before we disconnect instead of racing them — an in-flight load
   // rejected by disconnect logs after Jest considers the file done and fails the run.
@@ -31,7 +31,7 @@ afterAll(async () => {
   redisClient.disconnect();
 });
 
-describe("createAuthRateLimiter", () => {
+describe("createRateLimiter", () => {
   it("allows requests up to the limit and rejects the next one with 429", async () => {
     const app = buildProbeApp(uniqueRouteKey("boundary"), 2);
 
@@ -56,5 +56,28 @@ describe("createAuthRateLimiter", () => {
     expect(loginFirst.status).toBe(200);
     expect(registerFirst.status).toBe(200);
     expect(loginSecond.status).toBe(429);
+  });
+
+  it("keys by the caller-provided keyGenerator instead of IP when supplied", async () => {
+    const routeKey = uniqueRouteKey("per-user");
+    const limiter = createRateLimiter({
+      routeKey,
+      maxAttempts: 1,
+      windowMs: 60_000,
+      keyGenerator: (req) => req.headers["x-user-id"] as string,
+    });
+    const app = express();
+    app.post("/probe", limiter, (_req, res) => {
+      res.status(200).json({ ok: true });
+    });
+    app.use(errorHandler);
+
+    const userAFirst = await request(app).post("/probe").set("x-user-id", "user-a");
+    const userBFirst = await request(app).post("/probe").set("x-user-id", "user-b");
+    const userASecond = await request(app).post("/probe").set("x-user-id", "user-a");
+
+    expect(userAFirst.status).toBe(200);
+    expect(userBFirst.status).toBe(200);
+    expect(userASecond.status).toBe(429);
   });
 });

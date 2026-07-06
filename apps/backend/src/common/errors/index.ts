@@ -5,3 +5,4 @@ export * from "./forbidden-error.js";
 export * from "./not-found-error.js";
 export * from "./conflict-error.js";
 export * from "./too-many-requests-error.js";
+export * from "./service-unavailable-error.js";

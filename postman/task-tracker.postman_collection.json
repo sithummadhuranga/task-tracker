@@ -1,0 +1,883 @@
+{
+  "info": {
+    "name": "Task Tracker API",
+    "description": "Backend API for the Task Tracker assessment project: auth/session, RBAC administration, and task CRUD with real-time WebSocket events.\n\n**Run order matters** (this collection chains ids/tokens between requests via collection variables, visible under the collection's Variables tab):\n1. Auth > Register, then Auth > Login — creates a regular user, captures its access token (`accessToken`) and id (`userId`).\n2. Admin > Login as Admin — requires `adminEmail`/`adminPassword` set in the active environment (your ADMIN_SEED_EMAIL/ADMIN_SEED_PASSWORD from apps/backend/.env). Overwrites `accessToken` with the admin's.\n3. RBAC Administration and Users folders — run as the admin (step 2), targeting the regular user captured in step 1 (`{{userId}}`). Run them top-to-bottom within each folder; several later requests depend on ids captured by earlier ones in the same folder.\n4. Tasks folder — re-run Auth > Login (regular user, step 1) first if you want to exercise the `:own`-scoped paths instead of the admin's `:any` scope.\n\nEvery folder below explicitly declares Bearer Token auth (visible on the folder's own Authorization tab) sourced from `{{accessToken}}` — Health and the public Auth endpoints (Register/Login/Refresh) override it to No Auth at the request level, everything else inherits it. The refresh token is a cookie (`refresh_token`), handled by Postman's own cookie jar; nothing to configure for that.\n\n**Access tokens expire after 15 minutes.** If a request that worked earlier suddenly returns 401 partway through a manual run, that's why — rerun Auth > Login (or Admin > Login as Admin) to get a fresh token, not a bug in the request itself.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "testEmail",
+      "value": ""
+    },
+    {
+      "key": "roleName",
+      "value": ""
+    },
+    {
+      "key": "roleId",
+      "value": ""
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "permissionOverrideId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Ops plumbing, not part of the versioned /api/v1 surface. No auth required.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Container/orchestrator healthcheck."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Registration, login/logout, and session refresh. Register/Login/Refresh are public (No Auth, set explicitly on each of those three requests); Get Me/Logout/Logout All require the Bearer token this folder declares.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('testEmail', `user_${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"name\": \"Test User\"\n}"
+            },
+            "description": "Creates a new user, always assigned the USER role regardless of any `role` field sent. Does not log in — call Login next. 409 on a duplicate email. `testEmail` is regenerated fresh (timestamp-based) by this request's pre-request script every time it runs, so re-running never collides."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('userId', body.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "description": "Requires Register to have run first in this session (uses the same `{{testEmail}}`). Issues a 15-minute access token (JSON body) and a refresh token (httpOnly cookie, never in the body). Captures accessToken and userId into collection variables on success — every other folder in this collection depends on this having run."
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', pm.response.json().accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Reads the refresh_token cookie only (set by Login). Rotates it and returns a new access token. A reused/expired token revokes every session for that user and returns 401 — use this if your accessToken went stale (15 min) instead of Login again, to avoid creating a new user."
+          }
+        },
+        {
+          "name": "Get Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "Returns the caller's user record, role names, and fully-resolved effective permissions — what the frontend uses to drive all permission-gated UI."
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "description": "Revokes only the current session (the refresh token behind the request's cookie). Run Login again afterward if you want to keep using this collection — accessToken is not cleared client-side, but the session behind it is now dead server-side."
+          }
+        },
+        {
+          "name": "Logout All",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout-all",
+            "description": "Revokes every session for the caller and force-disconnects their live WebSocket connections. Same caveat as Logout — run Login again afterward."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "One-off login as the seeded admin account. Run this after Auth > Register/Login, before RBAC Administration or Users.",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', pm.response.json().accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "description": "Logs in as the seeded admin account. `adminEmail`/`adminPassword` must be set in the active Postman Environment (not the collection) to your ADMIN_SEED_EMAIL/ADMIN_SEED_PASSWORD — check the environment selector dropdown top-right in Postman is set to 'Task Tracker - Local' (or your renamed copy of it) before running this, otherwise those two variables resolve to empty strings and this call 401s. Overwrites the shared accessToken with the admin's."
+          }
+        }
+      ]
+    },
+    {
+      "name": "RBAC Administration",
+      "description": "Role and role-permission management. Every request here requires role:manage and inherits Bearer auth from {{accessToken}} — run Admin > Login as Admin first. Run top-to-bottom: Create Role populates {{roleId}}, which Rename/Replace Permissions/Assign/Delete all depend on.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "List Permission Catalog",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/permissions",
+            "description": "Requires role:manage OR permission:assign. Returns the fixed, code-defined permission catalog."
+          }
+        },
+        {
+          "name": "List Roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/roles",
+            "description": "Requires role:manage. Returns every role with its assigned permission keys."
+          }
+        },
+        {
+          "name": "Create Role",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('roleName', `Postman Test Role ${Date.now()}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('roleId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/roles",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{roleName}}\"\n}"
+            },
+            "description": "Requires role:manage. Creates a new role, isSystem: false, no permissions assigned yet. `roleName` is regenerated fresh (timestamp-based) by this request's pre-request script every time it runs, so a role left behind by an interrupted previous run (e.g. Delete Role never reached) can't collide with this one. Captures the new role's id as {{roleId}} — every other request in this folder depends on this having run."
+          }
+        },
+        {
+          "name": "Rename Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/roles/{{roleId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{roleName}} (renamed)\"\n}"
+            },
+            "description": "Requires role:manage. Omitting name, or sending its current value, is a deliberate no-op (200 with the unchanged role, not an error)."
+          }
+        },
+        {
+          "name": "Replace Role Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/roles/{{roleId}}/permissions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionKeys\": [\"task:read:own\", \"task:create\"]\n}"
+            },
+            "description": "Requires role:manage. Full replacement of the role's permission set — invalidates the Redis permission cache for every user currently holding this role."
+          }
+        },
+        {
+          "name": "Assign User Roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/roles",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\"{{roleId}}\"]\n}"
+            },
+            "description": "Requires role:manage (deliberately, not user:manage). Full replacement of the target user's role assignments — invalidates that user's permission cache immediately. Uses {{userId}}, captured by Auth > Login, as the target."
+          }
+        },
+        {
+          "name": "Delete Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/roles/{{roleId}}",
+            "description": "Requires role:manage. 403 if the role is a system role (USER/ADMIN). Otherwise deletes it and cascades its UserRole assignments — run this last, after Assign User Roles, or that assignment will dangle on a deleted role."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "User administration and per-user permission overrides. Every request here requires an admin-scope permission (user:manage or permission:assign) and inherits Bearer auth from {{accessToken}} — run Admin > Login as Admin first. Run top-to-bottom: Upsert Permission Override must run before Get User Detail, which captures {{permissionOverrideId}} for Delete Permission Override.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "List Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Requires user:manage. Paginated user list with each user's assigned role names."
+          }
+        },
+        {
+          "name": "Lookup Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/lookup?q=test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "lookup"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "test"
+                }
+              ]
+            },
+            "description": "Requires task:read:any OR user:manage. Exactly one of `ids` (comma-separated) or `q` (free-text, capped at 10 results) must be present — 400 if neither or both are. Used by the frontend to resolve a task's ownerId to a display name."
+          }
+        },
+        {
+          "name": "Upsert Permission Override",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/permissions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionKey\": \"task:read:any\",\n  \"effect\": \"GRANT\"\n}"
+            },
+            "description": "Requires permission:assign. Upserts a direct per-user override; DENY always wins over any role-derived grant for the same key. Invalidates that user's permission cache immediately. This returns 204 with no body — run Get User Detail next to fetch the resulting override's id."
+          }
+        },
+        {
+          "name": "Get User Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const overrides = pm.response.json().overrides;",
+                  "  if (overrides && overrides.length > 0) {",
+                  "    pm.collectionVariables.set('permissionOverrideId', overrides[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}",
+            "description": "Requires user:manage. Returns the user's roles and direct permission overrides. Must run after Upsert Permission Override (not before) — it captures the first override's id into {{permissionOverrideId}} for the Delete Permission Override request below."
+          }
+        },
+        {
+          "name": "Delete Permission Override",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/permissions/{{permissionOverrideId}}",
+            "description": "Requires permission:assign. Removes a direct override, reverting that user to role-derived permissions only for that key. Depends on {{permissionOverrideId}} from Get User Detail — a blank id here (404) means Get User Detail didn't run, or ran before Upsert Permission Override."
+          }
+        },
+        {
+          "name": "Logout All For User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/logout-all",
+            "description": "Requires user:manage. Admin-triggered equivalent of Auth > Logout All, targeting a different user's sessions."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Task CRUD. Requires task:create/task:read:*/task:update:*/task:delete:* depending on the request, and inherits Bearer auth from {{accessToken}} — works with either the regular user (Auth > Login, :own scope) or the admin (Admin > Login as Admin, :any scope). Run Create Task first to populate {{taskId}}.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Create Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('taskId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/tasks",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Write the API docs\",\n  \"description\": \"Cover every endpoint in the Postman collection\",\n  \"dueDate\": \"2026-12-31T00:00:00.000Z\"\n}"
+            },
+            "description": "Requires task:create. Owner defaults to the caller; an explicit `ownerId` in the body is only honored for a caller with task:read:any. status defaults to TODO. Past dueDate values are allowed. Emits a task.created WebSocket event. Captures the new task's id as {{taskId}} — every other request in this folder depends on this having run."
+          }
+        },
+        {
+          "name": "Magic Polish (AI task formatting, bonus)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 200 if the reviewer has set GEMINI_API_KEY on the backend; 503 (not a failure of",
+                  "// this collection) if that optional env var is unset. Either response means the endpoint",
+                  "// is wired up correctly.",
+                  "pm.test('status is 200 (configured) or 503 (GEMINI_API_KEY not set)', () => {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('response has polished title and description', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.title).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.description).to.be.a('string');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/tasks/magic-polish",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"write report\",\n  \"description\": \"draft it, review it, submit it by friday\"\n}"
+            },
+            "description": "Requires task:create OR task:update:own OR task:update:any (same as create/update, no dedicated permission key). Stateless — never reads or writes a Task row, no WebSocket event. Optional bonus feature: returns 503 rather than an error if GEMINI_API_KEY is not configured server-side. Never persists the result; resubmit the polished title/description via Create Task or Update Task to actually save it."
+          }
+        },
+        {
+          "name": "Get Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+            "description": "Requires task:read:own OR task:read:any. A caller with only :own gets 404 (not 403) for a task they don't own — indistinguishable from a task that doesn't exist at all."
+          }
+        },
+        {
+          "name": "List Tasks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "TODO",
+                  "disabled": true
+                },
+                {
+                  "key": "ownerId",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Requires task:read:own OR task:read:any. A caller with only :own is always forced to their own ownerId regardless of the ownerId query param. totalPages is at least 1 even when total is 0. Default sort createdAt DESC. Enable the disabled `status`/`ownerId` query params above to try filtering."
+          }
+        },
+        {
+          "name": "Update Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"version\": 1\n}"
+            },
+            "description": "Requires task:update:own OR task:update:any, same ownership gate as Get Task. Partial update — any subset of title/description/status/dueDate/ownerId. ownerId itself only editable with task:update:any. Emits a task.updated WebSocket event. `version` is required (optimistic concurrency) — it must match the task's current version exactly, or this returns 409. Hardcoded to 1 here since Create Task always runs immediately before this in the suggested run order; if you've already run Update Task once against this task, bump it to 2, and so on."
+          }
+        },
+        {
+          "name": "Delete Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+            "description": "Requires task:delete:own OR task:delete:any, same ownership gate. Soft delete (deletedAt set, never returned in any response) — the task then 404s from every read/write endpoint. Emits a task.deleted WebSocket event. Run this last in the folder — every other Tasks request above depends on {{taskId}} still existing."
+          }
+        }
+      ]
+    }
+  ]
+}

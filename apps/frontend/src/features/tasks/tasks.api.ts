@@ -73,16 +73,32 @@ export function deleteTask(id: string): Promise<void> {
   return apiClient.delete(`/tasks/${id}`);
 }
 
+export interface MagicPolishBody {
+  title: string;
+  description?: string;
+}
+
+export interface MagicPolishResult {
+  title: string;
+  description: string;
+}
+
+// Stateless text-formatting helper (bonus AI/LLM integration feature) — never persists anything
+// itself. The caller still owns deciding whether to keep the result and must submit it via the
+// normal create/update flow.
+export function magicPolishTask(body: MagicPolishBody): Promise<MagicPolishResult> {
+  return apiClient.post("/tasks/magic-polish", body);
+}
+
 export interface UserLookupResult {
   id: string;
   name: string;
   email: string;
 }
 
-// Backend addition made alongside this feature (see docs/FEATURES_AND_API.md's GET
-// /users/lookup entry) — resolves ownerId -> {name, email} for display, and powers the
-// search-as-you-type owner picker. Gated on task:read:any OR user:manage, same as the task
-// endpoints that need it.
+// Backend addition made alongside this feature — resolves ownerId -> {name, email} for display,
+// and powers the search-as-you-type owner picker. Gated on task:read:any OR user:manage, same as
+// the task endpoints that need it.
 export function lookupUsersByIds(ids: string[]): Promise<UserLookupResult[]> {
   if (ids.length === 0) {
     return Promise.resolve([]);
