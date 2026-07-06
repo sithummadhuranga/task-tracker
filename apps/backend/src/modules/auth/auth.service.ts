@@ -5,6 +5,7 @@ import { ConflictError, UnauthorizedError } from "../../common/errors/index.js";
 import { BCRYPT_COST } from "../../common/security/password.js";
 import { permissionsService, type PermissionsService } from "../rbac/permissions.service.js";
 import { PrismaUsersRepository, type UsersRepository } from "../users/users.repository.js";
+import { socketSessionGateway, type SocketSessionGateway } from "../../websocket/gateway.js";
 import type { LoginInput, RegisterInput } from "./auth.dto.js";
 import { RedisSessionRepository, type SessionRepository } from "./session.repository.js";
 
@@ -14,6 +15,8 @@ export type PermissionsResolver = Pick<
   PermissionsService,
   "resolveEffectivePermissions" | "addUserToRoleIndex"
 >;
+
+export type SocketDisconnector = Pick<SocketSessionGateway, "disconnectUser">;
 
 // Narrowed against the full UsersRepository, which has grown RBAC-admin-only methods
 // (pagination, role/permission-override management) that auth never touches.
@@ -52,6 +55,7 @@ export class AuthService {
     private readonly usersRepository: AuthUsersRepository = new PrismaUsersRepository(),
     private readonly sessionRepository: SessionRepository = new RedisSessionRepository(),
     private readonly permissions: PermissionsResolver = permissionsService,
+    private readonly socketDisconnector: SocketDisconnector = socketSessionGateway,
   ) {}
 
   async register(input: RegisterInput): Promise<RegisteredUser> {
@@ -122,6 +126,7 @@ export class AuthService {
 
   async logoutAll(userId: string): Promise<void> {
     await this.sessionRepository.revokeAllSessions(userId);
+    this.socketDisconnector.disconnectUser(userId);
   }
 
   async me(userId: string): Promise<MeResult> {

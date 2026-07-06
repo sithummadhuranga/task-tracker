@@ -9,6 +9,24 @@ import {
   type TaskSocketServer,
 } from "./events.js";
 
+// Access tokens are verified only once, at handshake — a live connection otherwise outlives a
+// revoked session for up to the token's remaining 15-minute lifetime, still receiving task
+// events. logout-all calls disconnectUser() right after revoking sessions so a forced logout
+// takes effect on open sockets immediately, not just on the caller's next HTTP request.
+export class SocketSessionGateway {
+  private io: TaskSocketServer | null = null;
+
+  attach(server: TaskSocketServer): void {
+    this.io = server;
+  }
+
+  disconnectUser(userId: string): void {
+    this.io?.in(taskOwnerRoom(userId)).disconnectSockets(true);
+  }
+}
+
+export const socketSessionGateway = new SocketSessionGateway();
+
 export type SocketPermissionsResolver = Pick<PermissionsService, "resolveEffectivePermissions">;
 
 interface HandshakeAuth {
@@ -66,6 +84,10 @@ export function registerSocketGateway(
   io.on("connection", (socket) => {
     joinRooms(socket, permissions).catch((error: unknown) => {
       logger.error({ err: error, userId: socket.data.userId }, "failed to join task rooms for socket");
+      // Left connected with no rooms joined, a socket would silently never receive task events
+      // again — disconnecting surfaces the failure to the client instead (its socket.io client
+      // reconnect logic then retries joinRooms fresh on the next handshake).
+      socket.disconnect(true);
     });
   });
 }

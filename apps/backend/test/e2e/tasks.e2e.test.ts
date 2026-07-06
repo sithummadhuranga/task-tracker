@@ -37,6 +37,7 @@ interface TaskBody {
   status: "TODO" | "IN_PROGRESS" | "DONE";
   dueDate: string;
   ownerId: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +76,7 @@ describe(`POST ${TASKS_BASE}`, () => {
     const body = response.body as TaskBody;
     expect(body.ownerId).toBe(owner.userId);
     expect(body.status).toBe("TODO");
+    expect(body.version).toBe(1);
   });
 
   it("forces ownerId to the caller when they lack task:read:any, even if a different ownerId is sent", async () => {
@@ -344,10 +346,55 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ status: "IN_PROGRESS" });
+      .send({ status: "IN_PROGRESS", version: 1 });
 
     expect(response.status).toBe(200);
-    expect((response.body as TaskBody).status).toBe("IN_PROGRESS");
+    const body = response.body as TaskBody;
+    expect(body.status).toBe("IN_PROGRESS");
+    expect(body.version).toBe(2);
+  });
+
+  it("returns 409 when the presented version is stale", async () => {
+    const owner = await createUserWithPermissions(
+      ["task:create", "task:update:own"],
+      "update-stale-version",
+    );
+    const created = await request(app)
+      .post(TASKS_BASE)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send(createTaskPayload());
+    const taskId = (created.body as TaskBody).id;
+
+    await request(app)
+      .patch(`${TASKS_BASE}/${taskId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send({ status: "IN_PROGRESS", version: 1 });
+
+    const staleResponse = await request(app)
+      .patch(`${TASKS_BASE}/${taskId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send({ status: "DONE", version: 1 });
+
+    expect(staleResponse.status).toBe(409);
+  });
+
+  it("rejects an update body missing version with 400", async () => {
+    const owner = await createUserWithPermissions(
+      ["task:create", "task:update:own"],
+      "update-missing-version",
+    );
+    const created = await request(app)
+      .post(TASKS_BASE)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send(createTaskPayload());
+    const taskId = (created.body as TaskBody).id;
+
+    const response = await request(app)
+      .patch(`${TASKS_BASE}/${taskId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .send({ status: "IN_PROGRESS" });
+
+    expect(response.status).toBe(400);
   });
 
   it("masks another user's task as 404 for a caller with only task:update:own", async () => {
@@ -365,7 +412,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${otherUser.accessToken}`)
-      .send({ status: "DONE" });
+      .send({ status: "DONE", version: 1 });
 
     expect(response.status).toBe(404);
   });
@@ -385,7 +432,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ ownerId: otherUser.userId });
+      .send({ ownerId: otherUser.userId, version: 1 });
 
     expect(response.status).toBe(200);
     expect((response.body as TaskBody).ownerId).toBe(owner.userId);
@@ -407,7 +454,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ ownerId: newOwner.userId });
+      .send({ ownerId: newOwner.userId, version: 1 });
 
     expect(response.status).toBe(200);
     expect((response.body as TaskBody).ownerId).toBe(newOwner.userId);
@@ -419,7 +466,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/00000000-0000-0000-0000-000000000000`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ status: "DONE" });
+      .send({ status: "DONE", version: 1 });
 
     expect(response.status).toBe(404);
   });
@@ -438,7 +485,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/${taskId}`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ status: "NOT_A_STATUS" });
+      .send({ status: "NOT_A_STATUS", version: 1 });
 
     expect(response.status).toBe(400);
   });
@@ -450,7 +497,7 @@ describe(`PATCH ${TASKS_BASE}/:id`, () => {
     const response = await request(app)
       .patch(`${TASKS_BASE}/00000000-0000-0000-0000-000000000000`)
       .set("Authorization", `Bearer ${user.accessToken}`)
-      .send({ status: "DONE" });
+      .send({ status: "DONE", version: 1 });
 
     expect(response.status).toBe(403);
   });

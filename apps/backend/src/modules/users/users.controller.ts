@@ -6,6 +6,9 @@ import { usersService } from "./users.service.js";
 export async function listUsers(req: Request, res: Response): Promise<void> {
   // Express types req.query as ParsedQs regardless of route; the validate() middleware has
   // already replaced it with the coerced-and-defaulted shape by the time this handler runs.
+  // Express's ReqQuery generic requires extends ParsedQs (string-only values), which this
+  // coerced shape (numbers) doesn't satisfy, so a cast here is the pragmatic option, not a
+  // typed-generics one.
   const { page, limit } = req.query as unknown as ListUsersQuery;
   const { users, total } = await usersService.listUsers({ page, limit });
 

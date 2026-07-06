@@ -5,6 +5,7 @@ import {
   AuthService,
   type AuthUsersRepository,
   type PermissionsResolver,
+  type SocketDisconnector,
 } from "../../src/modules/auth/auth.service.js";
 import type { RotateResult, SessionRepository } from "../../src/modules/auth/session.repository.js";
 import type {
@@ -100,6 +101,17 @@ function createPermissionsResolver(): PermissionsResolverMocks {
     resolveEffectivePermissions,
     addUserToRoleIndex,
   };
+}
+
+interface SocketDisconnectorMocks {
+  disconnector: SocketDisconnector;
+  disconnectUser: jest.Mock<SocketDisconnector["disconnectUser"]>;
+}
+
+function createSocketDisconnector(): SocketDisconnectorMocks {
+  const disconnectUser = jest.fn<SocketDisconnector["disconnectUser"]>(() => undefined);
+
+  return { disconnector: { disconnectUser }, disconnectUser };
 }
 
 describe("AuthService.register", () => {
@@ -311,6 +323,20 @@ describe("AuthService.logoutAll", () => {
     await service.logoutAll("user-1");
 
     expect(sessions.revokeAllSessions).toHaveBeenCalledWith("user-1");
+  });
+
+  it("force-disconnects the user's live WebSocket connections", async () => {
+    const sockets = createSocketDisconnector();
+    const service = new AuthService(
+      createUsersRepository().repository,
+      createSessionRepository().repository,
+      createPermissionsResolver().resolver,
+      sockets.disconnector,
+    );
+
+    await service.logoutAll("user-1");
+
+    expect(sockets.disconnectUser).toHaveBeenCalledWith("user-1");
   });
 });
 

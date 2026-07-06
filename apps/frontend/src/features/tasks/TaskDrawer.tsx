@@ -28,9 +28,20 @@ interface DraftState {
   status: TaskStatus;
   dueDateLocal: string;
   ownerId: string;
+  version: number;
 }
 
-const EMPTY_DRAFT: DraftState = { title: "", description: "", status: "TODO", dueDateLocal: "", ownerId: "" };
+// version: 1 is a placeholder for create mode only — the create request never sends it (a new
+// task has no prior version to check in against), and edit mode always overwrites it via
+// draftFromTask before the form is shown.
+const EMPTY_DRAFT: DraftState = {
+  title: "",
+  description: "",
+  status: "TODO",
+  dueDateLocal: "",
+  ownerId: "",
+  version: 1,
+};
 
 const FIELD_CLASSES =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60";
@@ -42,6 +53,7 @@ function draftFromTask(task: Task): DraftState {
     status: task.status,
     dueDateLocal: toDatetimeLocalValue(task.dueDate),
     ownerId: task.ownerId,
+    version: task.version,
   };
 }
 
@@ -123,7 +135,16 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
       invalidateTasks(vars.id);
       onClose();
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, vars) => {
+      // A stale version means someone else changed this task since it was loaded — refetch and
+      // fall back to the read-only view instead of leaving the caller's now-outdated draft in
+      // the form, where saving again would just hit the same conflict.
+      if (error instanceof ApiError && error.statusCode === 409) {
+        toast.error("This task was changed elsewhere — showing the latest version.");
+        invalidateTasks(vars.id);
+        setPanelMode("view");
+        return;
+      }
       toast.error(errorMessage(error));
     },
   });
@@ -173,6 +194,7 @@ export function TaskDrawer({ target, onClose }: TaskDrawerProps) {
         status: draft.status,
         dueDate,
         ownerId: canSetOwnerOnEdit && draft.ownerId.trim() ? draft.ownerId.trim() : undefined,
+        version: draft.version,
       };
       updateMutation.mutate({ id: target.taskId, body });
     }

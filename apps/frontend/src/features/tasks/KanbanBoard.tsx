@@ -57,7 +57,8 @@ export function KanbanBoard({ ownerId, showOwnerColumn, currentUserId, canEditTa
   }
 
   const moveMutation = useMutation({
-    mutationFn: (vars: { id: string; to: TaskStatus }) => updateTask(vars.id, { status: vars.to }),
+    mutationFn: (vars: { id: string; to: TaskStatus; version: number }) =>
+      updateTask(vars.id, { status: vars.to, version: vars.version }),
     onMutate: async (vars) => {
       const found = findTask(vars.id);
       if (!found || found.status === vars.to) {
@@ -114,7 +115,7 @@ export function KanbanBoard({ ownerId, showOwnerColumn, currentUserId, canEditTa
     if (!found || found.status === toStatus || !canEditTaskFn(found.task)) {
       return;
     }
-    moveMutation.mutate({ id: taskId, to: toStatus });
+    moveMutation.mutate({ id: taskId, to: toStatus, version: found.task.version });
   }
 
   const allOwnerIds = TASK_STATUSES.flatMap((status) => queriesByStatus[status].data?.data.map((task) => task.ownerId) ?? []);

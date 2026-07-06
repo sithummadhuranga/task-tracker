@@ -1,5 +1,5 @@
 import type { CreateTaskInput, TaskListQuery, UpdateTaskInput } from "@task-tracker/shared-types";
-import { NotFoundError } from "../../common/errors/index.js";
+import { ConflictError, NotFoundError } from "../../common/errors/index.js";
 import { permissionsService, type PermissionsService } from "../rbac/permissions.service.js";
 import { taskEventsEmitter, type TaskEventsEmitter } from "../../websocket/events.js";
 import {
@@ -64,15 +64,21 @@ export class TasksService {
 
     // ownerId is stripped, not rejected, for a caller without task:update:any — consistent
     // with how the create/list endpoints handle the same admin-scope field elsewhere in this
-    // contract (silently overridden rather than a validation error).
-    const { ownerId, dueDate, ...rest } = input;
+    // contract (silently overridden rather than a validation error). version is likewise pulled
+    // out here — it's the concurrency check-in, not a column being written.
+    const { ownerId, dueDate, version, ...rest } = input;
     const updateData: UpdateTaskData = {
       ...rest,
       ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
       ...(canUpdateAny && ownerId ? { ownerId } : {}),
     };
 
-    const updated = await this.repository.update(task.id, updateData);
+    const updated = await this.repository.update(task.id, version, updateData);
+
+    if (!updated) {
+      throw new ConflictError("task was changed since you last loaded it — reload and try again");
+    }
+
     this.events.emit("task.updated", updated);
     return updated;
   }

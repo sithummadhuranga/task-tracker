@@ -107,8 +107,21 @@ pnpm turbo run lint
 pnpm turbo run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs all three on every push and pull request, against real
-Postgres and Redis service containers — nothing merges without passing.
+CI (`.github/workflows/ci.yml`) runs all three on every push to `main`/`develop` and on every
+pull request (any source branch), against real Postgres and Redis service containers — nothing
+merges without passing.
+
+## API Reference (Postman)
+
+`postman/task-tracker.postman_collection.json` covers every endpoint in this API, organized
+into Health, Auth, Admin, RBAC Administration, Users, and Tasks folders. Import it alongside
+`postman/task-tracker.postman_environment.json` (select that environment in Postman), set
+`adminEmail`/`adminPassword` to your `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD`, then run
+Auth > Register, Auth > Login, and Admin > Login as Admin in that order — access tokens and the
+ids needed to chain later requests (`userId`, `roleId`, `taskId`, `permissionOverrideId`) are
+captured automatically via each request's test script. The refresh token is a cookie, handled
+by Postman's own cookie jar. Each request's description explains its permission requirement and
+any locked, non-obvious behavior (ownership masking, no-op renames, etc.).
 
 ## Deployment
 
@@ -165,6 +178,24 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
 - `/auth/login` and `/auth/register` are rate-limited to 10 requests per IP per 15-minute
   window (Redis-backed, so the limit holds across instances). Chosen as a reasonable default
   to block brute-force/credential-stuffing without a documented threshold requirement.
+- Refresh token rotation's read-then-tombstone step runs as a single Redis `EVAL` (Lua), not a
+  plain `GET` followed by a separate `SET` — otherwise two concurrent presenters of the same
+  stolen token could both read "active" before either wrote the "rotated" marker, letting a
+  replay slip past reuse detection.
+- Logging out of all sessions (`/auth/logout-all`, and the admin
+  `/users/:id/logout-all`) also force-disconnects that user's live WebSocket connections, not
+  just their Redis-backed refresh sessions — a handshake's access token is otherwise checked
+  once, at connect time, so an open socket would otherwise keep receiving task events for up to
+  its remaining 15-minute lifetime after a revoke.
+- `PATCH /tasks/:id` requires a `version` field (optimistic concurrency) — every Task carries an
+  integer `version`, incremented on each successful update. The caller must echo back the
+  version it last read; a stale value returns `409 Conflict` instead of silently overwriting a
+  concurrent edit. Multi-statement Postgres writes elsewhere (user registration's role
+  assignment, role-permission replacement, user-role replacement) already run inside
+  `prisma.$transaction` for atomicity; Redis-side bookkeeping (permission cache, session/role
+  indexes) is necessarily outside that transaction — a distributed transaction across Postgres
+  and Redis isn't worth the complexity at this scale, and any divergence self-heals within the
+  permission cache's 60-second TTL without ever granting access beyond what Postgres allows.
 
 ## Future Improvements
 

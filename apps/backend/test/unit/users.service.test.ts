@@ -4,6 +4,7 @@ import type { SessionRepository } from "../../src/modules/auth/session.repositor
 import type {
   CacheInvalidator,
   LogoutSessionRepository,
+  SocketDisconnector,
 } from "../../src/modules/users/users.service.js";
 import { UsersService } from "../../src/modules/users/users.service.js";
 import type {
@@ -128,12 +129,28 @@ function createPermissions(): PermissionsMocks {
   return { permissions: { invalidateCacheForUser }, invalidateCacheForUser };
 }
 
+interface SocketDisconnectorMocks {
+  disconnector: SocketDisconnector;
+  disconnectUser: jest.Mock<SocketDisconnector["disconnectUser"]>;
+}
+
+function createSocketDisconnector(): SocketDisconnectorMocks {
+  const disconnectUser = jest.fn<SocketDisconnector["disconnectUser"]>(() => undefined);
+  return { disconnector: { disconnectUser }, disconnectUser };
+}
+
 function buildService(
   users: UsersRepositoryMocks = createUsersRepository(),
   sessions: SessionRepositoryMocks = createSessionRepository(),
   permissions: PermissionsMocks = createPermissions(),
+  sockets: SocketDisconnectorMocks = createSocketDisconnector(),
 ): UsersService {
-  return new UsersService(users.repository, sessions.repository, permissions.permissions);
+  return new UsersService(
+    users.repository,
+    sessions.repository,
+    permissions.permissions,
+    sockets.disconnector,
+  );
 }
 
 describe("UsersService.listUsers", () => {
@@ -291,5 +308,16 @@ describe("UsersService.logoutAllForUser", () => {
     await buildService(users, sessions).logoutAllForUser("target-user");
 
     expect(sessions.revokeAllSessions).toHaveBeenCalledWith("target-user");
+  });
+
+  it("force-disconnects the target user's live WebSocket connections", async () => {
+    const users = createUsersRepository();
+    const sockets = createSocketDisconnector();
+
+    await buildService(users, createSessionRepository(), createPermissions(), sockets).logoutAllForUser(
+      "target-user",
+    );
+
+    expect(sockets.disconnectUser).toHaveBeenCalledWith("target-user");
   });
 });

@@ -4,11 +4,29 @@ import { redisClient } from "../../common/redis/client.js";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-export type SessionRedisClient = Pick<Redis, "get" | "set" | "sadd" | "srem" | "del" | "smembers">;
+export type SessionRedisClient = Pick<Redis, "get" | "set" | "sadd" | "srem" | "del" | "smembers" | "call">;
 
 function sessionKey(token: string): string {
   return `session:${token}`;
 }
+
+// Reads the session value and, if it's still "active", flips it to "rotated" in the same
+// server-side step. A plain GET followed by a separate SET leaves a window where two concurrent
+// presenters of the same stolen token could both read "active" before either write the
+// tombstone — defeating reuse detection under a race. Returns the value as it was *before* the
+// tombstone write, so the caller can still tell "was active" from "was already rotated".
+const READ_AND_TOMBSTONE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return false
+end
+local decoded = cjson.decode(raw)
+if decoded.status == 'active' then
+  decoded.status = 'rotated'
+  redis.call('SET', KEYS[1], cjson.encode(decoded), 'KEEPTTL')
+end
+return raw
+`;
 
 function userSessionsKey(userId: string): string {
   return `user-sessions:${userId}`;
@@ -55,7 +73,12 @@ export class RedisSessionRepository implements SessionRepository {
   // that token is indistinguishable from garbage input — an unavoidable limit of a Redis
   // key-per-token model, not a gap in the detection logic itself.
   async rotateSession(oldToken: string): Promise<RotateResult> {
-    const raw = await this.redis.get(sessionKey(oldToken));
+    const raw = (await this.redis.call(
+      "EVAL",
+      READ_AND_TOMBSTONE_SCRIPT,
+      "1",
+      sessionKey(oldToken),
+    )) as string | null;
 
     if (!raw) {
       return { status: "not_found" };
@@ -68,8 +91,6 @@ export class RedisSessionRepository implements SessionRepository {
       return { status: "reuse_detected", userId: parsed.userId };
     }
 
-    const tombstone: SessionValue = { userId: parsed.userId, status: "rotated" };
-    await this.redis.set(sessionKey(oldToken), JSON.stringify(tombstone), "KEEPTTL");
     await this.redis.srem(userSessionsKey(parsed.userId), oldToken);
 
     const newToken = await this.createSession(parsed.userId);

@@ -99,6 +99,14 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      # nginx:alpine has no curl, but Alpine's busybox wget is present out of the box. Explicit
+      # 127.0.0.1, not localhost — this container's wget resolves localhost to ::1 first, and
+      # nginx here isn't listening on IPv6, which turns "localhost" into a false-negative.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres-data:

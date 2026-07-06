@@ -97,6 +97,10 @@ model Task {
   status      TaskStatus @default(TODO)
   dueDate     DateTime
   ownerId     String
+  // Optimistic concurrency: incremented on every successful update. PATCH must echo back the
+  // version it last read; a stale value is rejected with 409 rather than silently overwriting
+  // a concurrent edit.
+  version     Int        @default(1)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   // Soft delete: DELETE /tasks/:id sets this instead of removing the row. Null means "not
