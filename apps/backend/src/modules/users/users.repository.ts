@@ -1,4 +1,5 @@
 import type { PermissionEffect } from "../../generated/prisma/enums.js";
+import type { UserWhereInput } from "../../generated/prisma/models/User.js";
 import { prisma } from "../../prisma/client.js";
 
 export interface UserRecord {
@@ -115,15 +116,23 @@ export class PrismaUsersRepository implements UsersRepository {
 
   // No default sort is locked for this endpoint — reusing createdAt DESC since it's the one
   // sort convention established anywhere in the contract, for consistency.
+  //
+  // `where` is shared between findMany and count on purpose, even though it's empty today (this
+  // endpoint has no filter params in its locked contract) — deriving it once here means a future
+  // filter can't be added to one query and forgotten on the other, which would silently desync
+  // `total`/`totalPages` from the actual filtered result set.
   async findManyPaginated({ page, limit }: PaginationParams): Promise<PaginatedUsers> {
+    const where: UserWhereInput = {};
+
     const [records, total] = await prisma.$transaction([
       prisma.user.findMany({
+        where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: "desc" },
         include: { roles: { include: { role: true } } },
       }),
-      prisma.user.count(),
+      prisma.user.count({ where }),
     ]);
 
     return {

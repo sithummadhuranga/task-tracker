@@ -37,6 +37,10 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
   }
 
   req.user = { id: payload.sub };
+  // Every subsequent log line for this request (including one from the global error handler)
+  // now carries userId, closing the "can't trace a specific user's session" gap — bindings, not
+  // a one-off log call, so it applies regardless of which log statement fires later.
+  req.log.setBindings({ userId: payload.sub });
   next();
 }
 

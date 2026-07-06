@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../common/config/env.js";
+import { logger } from "../common/logging/logger.js";
 import { permissionsService, type PermissionsService } from "../modules/rbac/permissions.service.js";
 import {
   TASK_READ_ANY_ROOM,
@@ -64,7 +65,7 @@ export function registerSocketGateway(
 
   io.on("connection", (socket) => {
     joinRooms(socket, permissions).catch((error: unknown) => {
-      console.error("failed to join task rooms for socket", error);
+      logger.error({ err: error, userId: socket.data.userId }, "failed to join task rooms for socket");
     });
   });
 }

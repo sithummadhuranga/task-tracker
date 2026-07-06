@@ -35,9 +35,9 @@ function isExposableHttpError(err: unknown): err is ExposableHttpError {
   );
 }
 
-// Express identifies error middleware by arity (4 params) — _req/_next must stay in the
-// signature even though unused.
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+// Express identifies error middleware by arity (4 params) — _next must stay in the signature
+// even though unused.
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof AppError) {
     const body: ErrorResponseBody = {
       statusCode: err.statusCode,
@@ -58,7 +58,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  console.error(err);
+  // req.log (attached by pino-http, always wired ahead of every route in app.ts) already
+  // carries this request's reqId/method/url bindings, so this line can be correlated with the
+  // rest of that request's log output.
+  req.log.error({ err }, "unhandled error");
   const body: ErrorResponseBody = {
     statusCode: 500,
     error: "Internal Server Error",
