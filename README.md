@@ -3,6 +3,27 @@
 A full-stack Task Tracker with role-based access control and real-time task updates. This file
 covers how to actually run, test, and deploy the project.
 
+## Live Demo
+
+| Environment | Frontend | Backend |
+| ----------- | -------- | ------- |
+| Production  | https://task-tracker.sithum.dev/     | https://api-task-tracker.sithum.dev/ |
+| Staging     | https://task-tracker-dev.sithum.dev/ | https://api-task-tracker-dev.sithum.dev/ |
+
+Both track their respective branch automatically (`main` → production, `develop` → staging) via
+the CI/CD pipeline described below. Free-tier hosting on all four services (DigitalOcean, Vercel,
+Neon, Upstash), so the very first request after a period of inactivity may take a few seconds to
+cold-start. No demo login is published here — register a new account through the frontend to try
+it, or ask for a reviewer login separately.
+
+## Documentation
+
+- [`docs/FEATURES_AND_API.md`](docs/FEATURES_AND_API.md) — the complete API contract: every
+  entity, endpoint, permission requirement, and locked behavioral decision.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — stack rationale, repository layout, and the
+  routes → controller → service → repository → Prisma layering rule.
+- [`postman/`](postman/) — the Postman collection and environment referenced below.
+
 ## Stack
 
 | Layer            | Choice                                                                  |
@@ -52,11 +73,12 @@ cp apps/frontend/.env.example apps/frontend/.env
 | `ADMIN_SEED_EMAIL`    | backend  | Email for the one seeded admin account, only read the first time that account is created |
 | `ADMIN_SEED_PASSWORD` | backend  | Password for the same seeded admin account, only read the first time that account is created |
 | `VITE_API_URL`        | frontend | Backend base URL. For local `vite dev`, read at dev-server start; for Docker, baked into the static bundle at `docker compose build` time via a build arg (see root `.env.example`) — Vite has no server process at runtime to read it later |
+| `GEMINI_API_KEY`      | backend  | **Optional.** Enables the bonus "Magic Polish" AI endpoint (`POST /tasks/magic-polish`). Get a free-tier key at https://aistudio.google.com/apikey. Leave blank to skip — the app still boots and every other feature works; that one endpoint responds `503` instead |
 
 The backend fails fast at boot with a clear error if any of these (aside from
 `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD`, which only the seed step reads, not the running
-server) are missing or malformed (`src/common/config/env.ts`) — it will not silently start in
-a broken state.
+server, and `GEMINI_API_KEY`, which is optional) are missing or malformed
+(`src/common/config/env.ts`) — it will not silently start in a broken state.
 
 ### 3. Database setup
 
@@ -113,15 +135,31 @@ merges without passing.
 
 ## API Reference (Postman)
 
-`postman/task-tracker.postman_collection.json` covers every endpoint in this API, organized
-into Health, Auth, Admin, RBAC Administration, Users, and Tasks folders. Import it alongside
-`postman/task-tracker.postman_environment.json` (select that environment in Postman), set
-`adminEmail`/`adminPassword` to your `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD`, then run
-Auth > Register, Auth > Login, and Admin > Login as Admin in that order — access tokens and the
-ids needed to chain later requests (`userId`, `roleId`, `taskId`, `permissionOverrideId`) are
-captured automatically via each request's test script. The refresh token is a cookie, handled
-by Postman's own cookie jar. Each request's description explains its permission requirement and
-any locked, non-obvious behavior (ownership masking, no-op renames, etc.).
+`postman/task-tracker.postman_collection.json` covers every implemented endpoint, organized into
+Health, Auth, Admin, RBAC Administration, Users, and Tasks folders.
+
+**Setup (once per Postman installation):**
+
+1. Import `postman/task-tracker.postman_collection.json` (File → Import).
+2. Import `postman/task-tracker.postman_environment.json` the same way.
+3. In the environment selector dropdown, top-right of the Postman window, select
+   **"Task Tracker - Local"**. This is the step it's easiest to forget — every request reads
+   `{{baseUrl}}` from this environment, and without it selected every request 404s against
+   nothing.
+4. Open that environment (the eye icon next to the dropdown, or Environments in the sidebar) and
+   fill in `adminEmail` / `adminPassword` with whatever you set `ADMIN_SEED_EMAIL` /
+   `ADMIN_SEED_PASSWORD` to during setup (see Environment configuration above). `baseUrl`
+   (`http://localhost:4000`) and `testPassword` already have working defaults — only the two
+   admin fields need to be filled in.
+
+**Run order:** Auth > Register, then Auth > Login, then Admin > Login as Admin — in that order,
+every time you start a fresh run. After that, every other folder can be run in any order. Access
+tokens and the ids needed to chain later requests (`userId`, `roleId`, `taskId`,
+`permissionOverrideId`) are captured automatically via each request's test script; the refresh
+token is a cookie, handled by Postman's own cookie jar. Each request's description explains its
+permission requirement and any locked, non-obvious behavior (ownership masking, no-op renames,
+etc.). Tasks > Magic Polish is the one request expected to return `503` instead of `200` unless
+you've also set the optional `GEMINI_API_KEY` — that's correct behavior, not a failure.
 
 ## Deployment
 
@@ -163,6 +201,60 @@ sensitive lives in GitHub Environment secrets and is substituted into the Digita
 Once secrets are in place, every push to `develop`/`main` runs CI, and only on success builds,
 pushes, and deploys the corresponding environment — no manual redeploy steps after that.
 
+## Design Decisions
+
+### Architecture overview
+
+Monorepo (pnpm workspaces + Turborepo): `apps/backend` (Express + TypeScript), `apps/frontend`
+(React + Vite), and `packages/shared-types` (Zod schemas + enums used by both, so a validation
+rule only exists in one place). The backend enforces a strict one-way layering on every module:
+
+```
+routes → controller → service → repository → Prisma
+```
+
+- **routes** wire path + middleware chain (`authenticate`, `requirePermission`, `validate`) to a
+  controller method — no logic of their own.
+- **controllers** parse the request and shape the HTTP response — no business rules, no direct
+  Prisma access.
+- **services** hold all business logic (ownership checks, permission resolution, RBAC rules) and
+  depend on a repository **interface**, never a concrete Prisma client — this is what makes
+  services unit-testable against a mocked repository instead of a real database.
+- **repositories** are the only layer that talks to Prisma.
+
+Full stack rationale, repository layout, and what's deliberately out of scope for v1 (no
+microservices, no Kubernetes, no persisted audit trail) are in `docs/ARCHITECTURE.md`. The
+complete API contract — every endpoint, permission requirement, and locked behavioral decision —
+is in `docs/FEATURES_AND_API.md`.
+
+### Key implementation decisions
+
+- **RBAC model**: a user's effective permissions are (permissions from every assigned role) plus
+  direct per-user `GRANT` overrides, minus direct per-user `DENY` overrides — DENY always wins,
+  even over a role-derived grant. Permissions are resolved server-side from a Redis cache on
+  every request, never embedded in the JWT, so revoking a permission takes effect immediately
+  rather than waiting up to the access token's 15-minute lifetime.
+- **Auth sessions**: short-lived JWT access tokens (15 min) plus an opaque, Redis-backed refresh
+  token in an httpOnly/Secure/SameSite=Strict cookie, rotated on every use. Reuse of an
+  already-rotated refresh token is treated as theft and revokes every session for that user.
+- **Ownership vs. permission are two independent checks** on every task operation: does the
+  caller hold the permission at all (`:own` or `:any`), and if only `:own`, is the caller the
+  owner? A caller who can't see a task gets `404`, not `403` — this hides whether the resource
+  exists at all from someone with no visibility into it.
+- **Optimistic concurrency on tasks**: every Task carries an integer `version`. An update must
+  echo back the version it last read; a stale value is rejected with `409` rather than silently
+  overwriting a concurrent edit.
+- **Real-time updates**: Socket.io, with sockets joined to permission-scoped rooms
+  (`user:{id}`, and `permission:task:read:any` for admin-scope viewers) at handshake time, so a
+  task event reaches exactly the sessions that should see it and no others.
+- **Soft delete**: tasks are never hard-deleted (`deletedAt`); every query filters it out, and no
+  API response ever exposes the column, so a soft-deleted task is indistinguishable from a
+  hard-deleted one to any caller.
+- **Bonus AI/LLM integration** (`POST /tasks/magic-polish`): a small, isolated, optional feature
+  — stateless (no Task row read or written), calling Google Gemini directly over `fetch` (no SDK
+  dependency), rate-limited per user rather than per IP since the resource being protected is API
+  spend, and safely disabled (`503`, not a crash) if no API key is configured.
+
 ## Assumptions
 
 - Ownership-check failures return `404`, not `403` (masks whether a resource exists from a
@@ -196,6 +288,11 @@ pushes, and deploys the corresponding environment — no manual redeploy steps a
   indexes) is necessarily outside that transaction — a distributed transaction across Postgres
   and Redis isn't worth the complexity at this scale, and any divergence self-heals within the
   permission cache's 60-second TTL without ever granting access beyond what Postgres allows.
+- `POST /tasks/magic-polish` (bonus AI/LLM integration) is a stateless helper only — it never
+  touches a Task row itself, isn't tied to a specific permission key beyond the existing
+  task-write ones, and is rate-limited per authenticated user (not per IP, since the resource
+  being protected is API spend). `GEMINI_API_KEY` is optional; without it the endpoint returns
+  `503` and every other feature is unaffected. See `docs/FEATURES_AND_API.md` §5a.
 
 ## Future Improvements
 

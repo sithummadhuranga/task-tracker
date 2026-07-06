@@ -192,6 +192,52 @@ describe("TaskDrawer", () => {
     expect(screen.queryByText("Someone else's edit")).not.toBeInTheDocument();
   });
 
+  it("disables Magic Polish until a title is entered, then replaces title/description with the AI result", async () => {
+    apiClientMock.post.mockImplementation((path: string, body: unknown) => {
+      if (path === "/tasks/magic-polish") {
+        return Promise.resolve({ title: "Write the quarterly report", description: "- Draft\n- Review" });
+      }
+      return Promise.reject(new Error(`unexpected path ${path} with body ${JSON.stringify(body)}`));
+    });
+    renderDrawer({ mode: "create" }, ["task:create"]);
+    await screen.findByRole("heading", { name: "New task" });
+
+    expect(screen.getByRole("button", { name: /magic polish/i })).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Title"), "write report");
+    expect(screen.getByRole("button", { name: /magic polish/i })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /magic polish/i }));
+
+    expect(await screen.findByDisplayValue("Write the quarterly report")).toBeInTheDocument();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Description").value).toBe("- Draft\n- Review");
+    expect(apiClientMock.post).toHaveBeenCalledWith("/tasks/magic-polish", {
+      title: "write report",
+      description: "",
+    });
+  });
+
+  it("leaves the draft untouched when Magic Polish fails", async () => {
+    apiClientMock.post.mockImplementation((path: string) => {
+      if (path === "/tasks/magic-polish") {
+        return Promise.reject(new ApiError(503, "AI polish is temporarily unavailable", null));
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+    renderDrawer({ mode: "create" }, ["task:create"]);
+    await screen.findByRole("heading", { name: "New task" });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Title"), "write report");
+    await user.click(screen.getByRole("button", { name: /magic polish/i }));
+
+    await waitFor(() => {
+      expect(apiClientMock.post).toHaveBeenCalledWith("/tasks/magic-polish", { title: "write report", description: "" });
+    });
+    expect(screen.getByDisplayValue("write report")).toBeInTheDocument();
+  });
+
   it("shows a generic not-found state for a 404 (missing task or unauthorized-and-not-owner)", async () => {
     refreshAccessTokenMock.mockResolvedValue(true);
     apiClientMock.get.mockImplementation((path: string) => {

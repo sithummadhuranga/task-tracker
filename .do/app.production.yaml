@@ -35,3 +35,9 @@ services:
       - key: CORS_ORIGIN
         value: ${CORS_ORIGIN}
         type: GENERAL
+      # Optional bonus feature (POST /tasks/magic-polish) — unset here just means that one
+      # endpoint responds 503, not that the app fails to deploy. No GEMINI_MODEL entry: it has
+      # an in-code default, same reasoning as leaving AUTH_RATE_LIMIT_* out of this spec.
+      - key: GEMINI_API_KEY
+        value: ${GEMINI_API_KEY}
+        type: SECRET

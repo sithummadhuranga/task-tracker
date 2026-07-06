@@ -15,7 +15,7 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 
 // dueDate accepts any ISO datetime string — past dates are allowed by design, a task can be
-// created already overdue (docs/FEATURES_AND_API.md §1 Task, §8 Locked Assumptions).
+// created already overdue.
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
@@ -37,6 +37,22 @@ export const updateTaskSchema = z.object({
   version: z.number().int().min(1),
 });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+// Reuses createTaskSchema's own title/description bounds rather than restating the magic
+// numbers — a polished result must always be resubmittable through the same create/update
+// validation, so the two can never silently drift apart.
+export const magicPolishRequestSchema = createTaskSchema.pick({ title: true, description: true });
+export type MagicPolishRequest = z.infer<typeof magicPolishRequestSchema>;
+
+// The model's own output is re-validated against these same bounds before it ever reaches a
+// client — an upstream LLM is an untrusted external input like any other, not a shortcut around
+// the limits a human-submitted body must satisfy. description has no .min(1): an empty string is
+// a valid (if discouraged by the prompt) polished result, not a malformed one.
+export const magicPolishResponseSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000),
+});
+export type MagicPolishResponse = z.infer<typeof magicPolishResponseSchema>;
 
 export const taskListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
