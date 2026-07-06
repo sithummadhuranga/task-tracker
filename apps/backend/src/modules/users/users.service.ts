@@ -1,12 +1,16 @@
 import { RedisSessionRepository, type SessionRepository } from "../auth/session.repository.js";
-import { NotFoundError } from "../../common/errors/index.js";
+import { NotFoundError, ValidationError } from "../../common/errors/index.js";
 import { permissionsService, type PermissionsService } from "../rbac/permissions.service.js";
-import type { ListUsersQuery, UpsertPermissionOverrideInput } from "./users.dto.js";
+import type { ListUsersQuery, UpsertPermissionOverrideInput, UserLookupQuery } from "./users.dto.js";
 import {
   PrismaUsersRepository,
   type PermissionOverrideRecord,
+  type UserLookupRecord,
   type UsersRepository,
 } from "./users.repository.js";
+
+// Caps the q= search mode result set — this is an autocomplete picker, not a directory browser.
+const USER_LOOKUP_SEARCH_LIMIT = 10;
 
 export type CacheInvalidator = Pick<PermissionsService, "invalidateCacheForUser">;
 export type LogoutSessionRepository = Pick<SessionRepository, "revokeAllSessions">;
@@ -111,6 +115,21 @@ export class UsersService {
     }
 
     await this.sessionRepository.revokeAllSessions(userId);
+  }
+
+  async lookupUsers(query: UserLookupQuery): Promise<UserLookupRecord[]> {
+    if (query.ids) {
+      return this.repository.findManyByIds(query.ids);
+    }
+
+    // validate() already enforced exactly one of ids/q is present (userLookupQuerySchema's
+    // refine) — this is an unreachable-in-practice guard, not a real 400 path, but it lets
+    // TypeScript narrow query.q to string without a cast or a `!` assertion.
+    if (!query.q) {
+      throw new ValidationError("exactly one of ids or q is required");
+    }
+
+    return this.repository.searchByText(query.q, USER_LOOKUP_SEARCH_LIMIT);
   }
 }
 

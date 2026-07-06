@@ -1,5 +1,14 @@
 import type { LoginInput, PermissionKey, RegisterInput } from "@task-tracker/shared-types";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { refreshAccessToken, setAccessToken } from "../../lib/apiClient";
 import { hasPermission as checkPermission } from "../../lib/permissions";
 import { fetchCurrentUser, loginUser, logoutUser, registerUser, type AuthUser } from "./auth.api";
@@ -23,6 +32,8 @@ interface AuthContextValue extends AuthState {
   hasPermission: (...keys: PermissionKey[]) => boolean;
 }
 
+const REFRESH_ON_FOCUS_MIN_INTERVAL_MS = 10_000;
+
 const UNAUTHENTICATED_STATE: AuthState = {
   status: "unauthenticated",
   user: null,
@@ -34,6 +45,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ ...UNAUTHENTICATED_STATE, status: "loading" });
+  const statusRef = useRef(state.status);
+  const lastRefreshAt = useRef(0);
+
+  // Kept in sync via an effect, not a direct assignment during render — the focus listener
+  // below reads this ref instead of depending on `state.status` directly, precisely so it
+  // doesn't need to be torn down and re-attached on every auth state change.
+  useEffect(() => {
+    statusRef.current = state.status;
+  });
 
   const loadCurrentUser = useCallback(async () => {
     const me = await fetchCurrentUser();
@@ -60,6 +80,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     void restoreSession();
+  }, [loadCurrentUser]);
+
+  // Roles/permissions are only ever fetched once at login otherwise — an admin granting or
+  // revoking access elsewhere would never reach an already-open tab without this. Refetching
+  // on focus (rather than polling) is the standard, low-chatter way to catch that: the user
+  // switching back to this tab is exactly the moment stale access would otherwise surface as
+  // silently-missing UI. Throttled so rapid tab-switching doesn't spam /auth/me.
+  useEffect(() => {
+    function handleFocus(): void {
+      if (statusRef.current !== "authenticated") {
+        return;
+      }
+      const now = Date.now();
+      if (now - lastRefreshAt.current < REFRESH_ON_FOCUS_MIN_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshAt.current = now;
+      loadCurrentUser().catch(() => {
+        setState(UNAUTHENTICATED_STATE);
+      });
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [loadCurrentUser]);
 
   const login = useCallback(

@@ -22,6 +22,11 @@ interface RoleResponseBody {
 
 afterAll(async () => {
   await prisma.$disconnect();
+  // ping() sits behind the rate limiters' fire-and-forget Lua script load (kicked off when
+  // app.js was imported) in the same FIFO command queue, so awaiting it guarantees that load
+  // has settled before we disconnect instead of racing it — an in-flight load rejected by
+  // disconnect logs after Jest considers the file done and fails the run.
+  await redisClient.ping().catch(() => undefined);
   redisClient.disconnect();
 });
 

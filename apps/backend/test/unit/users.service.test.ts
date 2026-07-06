@@ -8,6 +8,7 @@ import type {
 import { UsersService } from "../../src/modules/users/users.service.js";
 import type {
   PaginatedUsers,
+  UserLookupRecord,
   UserRecord,
   UsersRepository,
   UserWithOverrides,
@@ -48,6 +49,8 @@ interface UsersRepositoryMocks {
   findByIdWithOverrides: jest.Mock<UsersRepository["findByIdWithOverrides"]>;
   upsertPermissionOverride: jest.Mock<UsersRepository["upsertPermissionOverride"]>;
   deletePermissionOverride: jest.Mock<UsersRepository["deletePermissionOverride"]>;
+  findManyByIds: jest.Mock<UsersRepository["findManyByIds"]>;
+  searchByText: jest.Mock<UsersRepository["searchByText"]>;
 }
 
 function createUsersRepository(): UsersRepositoryMocks {
@@ -74,6 +77,8 @@ function createUsersRepository(): UsersRepositoryMocks {
   const deletePermissionOverride = jest.fn<UsersRepository["deletePermissionOverride"]>(() =>
     Promise.resolve(true),
   );
+  const findManyByIds = jest.fn<UsersRepository["findManyByIds"]>(() => Promise.resolve([]));
+  const searchByText = jest.fn<UsersRepository["searchByText"]>(() => Promise.resolve([]));
 
   return {
     repository: {
@@ -86,12 +91,16 @@ function createUsersRepository(): UsersRepositoryMocks {
       replaceRoles,
       upsertPermissionOverride,
       deletePermissionOverride,
+      findManyByIds,
+      searchByText,
     },
     findById,
     findManyPaginated,
     findByIdWithOverrides,
     upsertPermissionOverride,
     deletePermissionOverride,
+    findManyByIds,
+    searchByText,
   };
 }
 
@@ -238,6 +247,32 @@ describe("UsersService.deletePermissionOverride", () => {
     );
 
     expect(permissions.invalidateCacheForUser).toHaveBeenCalledWith("user-1");
+  });
+});
+
+describe("UsersService.lookupUsers", () => {
+  it("resolves by ids when ids is present, ignoring q", async () => {
+    const users = createUsersRepository();
+    const records: UserLookupRecord[] = [{ id: "user-1", name: "Jane Doe", email: "jane@example.com" }];
+    users.findManyByIds.mockResolvedValue(records);
+
+    const result = await buildService(users).lookupUsers({ ids: ["user-1"] });
+
+    expect(result).toEqual(records);
+    expect(users.findManyByIds).toHaveBeenCalledWith(["user-1"]);
+    expect(users.searchByText).not.toHaveBeenCalled();
+  });
+
+  it("searches by text when only q is present, capped at the search limit", async () => {
+    const users = createUsersRepository();
+    const records: UserLookupRecord[] = [{ id: "user-2", name: "Grace Hopper", email: "grace@example.com" }];
+    users.searchByText.mockResolvedValue(records);
+
+    const result = await buildService(users).lookupUsers({ q: "grace" });
+
+    expect(result).toEqual(records);
+    expect(users.searchByText).toHaveBeenCalledWith("grace", 10);
+    expect(users.findManyByIds).not.toHaveBeenCalled();
   });
 });
 

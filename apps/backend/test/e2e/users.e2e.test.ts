@@ -25,6 +25,11 @@ interface PaginatedUsersBody {
 
 afterAll(async () => {
   await prisma.$disconnect();
+  // ping() sits behind the rate limiters' fire-and-forget Lua script load (kicked off when
+  // app.js was imported) in the same FIFO command queue, so awaiting it guarantees that load
+  // has settled before we disconnect instead of racing it — an in-flight load rejected by
+  // disconnect logs after Jest considers the file done and fails the run.
+  await redisClient.ping().catch(() => undefined);
   redisClient.disconnect();
 });
 
@@ -85,6 +90,90 @@ describe(`GET ${USERS_BASE}/:id`, () => {
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe(`GET ${USERS_BASE}/lookup`, () => {
+  interface LookupBody {
+    id: string;
+    name: string;
+    email: string;
+  }
+
+  it("resolves users by ids for a caller with task:read:any", async () => {
+    const caller = await createUserWithPermissions(["task:read:any"], "lookup-by-ids-caller");
+    const target = await createZeroPermissionUser("lookup-by-ids-target");
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .query({ ids: target.userId })
+      .set("Authorization", `Bearer ${caller.accessToken}`);
+
+    expect(response.status).toBe(200);
+    const body = response.body as LookupBody[];
+    expect(body.map((entry) => entry.id)).toEqual([target.userId]);
+  });
+
+  it("resolves users by ids for a caller with user:manage", async () => {
+    const admin = await loginAsAdmin();
+    const target = await createZeroPermissionUser("lookup-by-ids-admin-target");
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .query({ ids: target.userId })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(response.status).toBe(200);
+    const body = response.body as LookupBody[];
+    expect(body.map((entry) => entry.id)).toEqual([target.userId]);
+  });
+
+  it("searches users by partial email with q", async () => {
+    const caller = await createUserWithPermissions(["task:read:any"], "lookup-by-q-caller");
+    const target = await createZeroPermissionUser("lookup-by-q-target");
+    const meBefore = await fetchMe(target.accessToken);
+    const targetEmail = meBefore.user.email;
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .query({ q: targetEmail.slice(0, targetEmail.indexOf("@")) })
+      .set("Authorization", `Bearer ${caller.accessToken}`);
+
+    expect(response.status).toBe(200);
+    const body = response.body as LookupBody[];
+    expect(body.some((entry) => entry.id === target.userId)).toBe(true);
+  });
+
+  it("rejects a request with neither ids nor q with 400", async () => {
+    const caller = await createUserWithPermissions(["task:read:any"], "lookup-bad-request");
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .set("Authorization", `Bearer ${caller.accessToken}`);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a request with both ids and q with 400", async () => {
+    const caller = await createUserWithPermissions(["task:read:any"], "lookup-both-params");
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .query({ ids: caller.userId, q: "anything" })
+      .set("Authorization", `Bearer ${caller.accessToken}`);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a caller without task:read:any or user:manage", async () => {
+    const caller = await createZeroPermissionUser("lookup-forbidden");
+
+    const response = await request(app)
+      .get(`${USERS_BASE}/lookup`)
+      .query({ q: "anything" })
+      .set("Authorization", `Bearer ${caller.accessToken}`);
+
+    expect(response.status).toBe(403);
   });
 });
 

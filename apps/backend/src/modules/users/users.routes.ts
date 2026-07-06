@@ -3,7 +3,7 @@ import { authenticate } from "../../common/middleware/authenticate.js";
 import { requirePermission } from "../../common/middleware/requirePermission.js";
 import { validate } from "../../common/middleware/validate.js";
 import * as usersController from "./users.controller.js";
-import { listUsersQuerySchema, upsertPermissionOverrideSchema } from "./users.dto.js";
+import { listUsersQuerySchema, upsertPermissionOverrideSchema, userLookupQuerySchema } from "./users.dto.js";
 
 export const usersRoutes = Router();
 
@@ -16,6 +16,17 @@ usersRoutes.get(
   requirePermission("user:manage"),
   validate(listUsersQuerySchema, "query"),
   usersController.listUsers,
+);
+
+// Must be registered before GET /:id — otherwise Express would match "lookup" as the :id param.
+// Gated on task:read:any as well as user:manage since this exists to let a task-scoped admin
+// resolve/search task owners without also requiring the separate user:manage permission.
+usersRoutes.get(
+  "/lookup",
+  authenticate,
+  requirePermission("task:read:any", "user:manage"),
+  validate(userLookupQuerySchema, "query"),
+  usersController.lookupUsers,
 );
 
 usersRoutes.get(

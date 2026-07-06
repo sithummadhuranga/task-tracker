@@ -50,6 +50,12 @@ export interface RoleAssignmentDiff {
   removed: string[];
 }
 
+export interface UserLookupRecord {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface UsersRepository {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
@@ -64,6 +70,8 @@ export interface UsersRepository {
     effect: PermissionEffect,
   ): Promise<void>;
   deletePermissionOverride(userId: string, permissionOverrideId: string): Promise<boolean>;
+  findManyByIds(ids: string[]): Promise<UserLookupRecord[]>;
+  searchByText(query: string, limit: number): Promise<UserLookupRecord[]>;
 }
 
 export class PrismaUsersRepository implements UsersRepository {
@@ -195,5 +203,26 @@ export class PrismaUsersRepository implements UsersRepository {
     });
 
     return result.count > 0;
+  }
+
+  async findManyByIds(ids: string[]): Promise<UserLookupRecord[]> {
+    return prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, email: true },
+    });
+  }
+
+  async searchByText(query: string, limit: number): Promise<UserLookupRecord[]> {
+    return prisma.user.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, name: true, email: true },
+      take: limit,
+      orderBy: { name: "asc" },
+    });
   }
 }

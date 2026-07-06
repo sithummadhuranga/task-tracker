@@ -1,27 +1,27 @@
 import { useState, type KeyboardEvent } from "react";
 import { AppHeader } from "../../components/ui/AppHeader";
+import { useAuth } from "../auth/AuthContext";
 import { RolesTab } from "./RolesTab";
 import { UsersTab } from "./UsersTab";
 
-const TABS = ["roles", "users"] as const;
-type AdminTab = (typeof TABS)[number];
+const TAB_LABEL = { roles: "Roles", users: "Users" } as const;
+type AdminTab = keyof typeof TAB_LABEL;
 
-const TAB_LABEL: Record<AdminTab, string> = {
-  roles: "Roles",
-  users: "Users",
-};
+interface AdminTabsProps {
+  tabs: AdminTab[];
+  tab: AdminTab;
+  onChange: (tab: AdminTab) => void;
+}
 
-function AdminTabs({ tab, onChange }: { tab: AdminTab; onChange: (tab: AdminTab) => void }) {
+function AdminTabs({ tabs, tab, onChange }: AdminTabsProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number): void {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
       return;
     }
 
     const nextIndex =
-      event.key === "ArrowRight"
-        ? (index + 1) % TABS.length
-        : (index - 1 + TABS.length) % TABS.length;
-    const next = TABS[nextIndex];
+      event.key === "ArrowRight" ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+    const next = tabs[nextIndex];
     if (next) {
       onChange(next);
     }
@@ -29,7 +29,7 @@ function AdminTabs({ tab, onChange }: { tab: AdminTab; onChange: (tab: AdminTab)
 
   return (
     <div role="tablist" aria-label="Admin sections" className="mb-6 flex gap-1 border-b border-border">
-      {TABS.map((value, index) => (
+      {tabs.map((value, index) => (
         <button
           key={value}
           type="button"
@@ -56,7 +56,20 @@ function AdminTabs({ tab, onChange }: { tab: AdminTab; onChange: (tab: AdminTab)
 }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<AdminTab>("roles");
+  const { hasPermission } = useAuth();
+  // Each tab is gated on the permission its own data actually requires (role:manage for
+  // GET /roles, user:manage for GET /users) — RequirePermission only guarantees the caller
+  // holds at least one admin-scoped key, not necessarily the one a given tab needs, so showing
+  // both tabs unconditionally would let a role:manage-only caller click into a Users tab that
+  // 403s immediately.
+  const availableTabs: AdminTab[] = [
+    ...(hasPermission("role:manage") ? (["roles"] as const) : []),
+    ...(hasPermission("user:manage") ? (["users"] as const) : []),
+  ];
+
+  const [requestedTab, setRequestedTab] = useState<AdminTab | null>(null);
+  const activeTab =
+    requestedTab && availableTabs.includes(requestedTab) ? requestedTab : (availableTabs[0] ?? null);
 
   return (
     <div className="min-h-screen bg-bg text-ink">
@@ -68,11 +81,19 @@ export function AdminPage() {
           <p className="mt-1 text-sm text-muted">Manage roles, permissions, and user access.</p>
         </div>
 
-        <AdminTabs tab={tab} onChange={setTab} />
+        {activeTab !== null && availableTabs.length > 1 && (
+          <AdminTabs tabs={availableTabs} tab={activeTab} onChange={setRequestedTab} />
+        )}
 
-        <div id={`admin-panel-${tab}`} role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
-          {tab === "roles" ? <RolesTab /> : <UsersTab />}
-        </div>
+        {activeTab === null && (
+          <p className="text-sm text-muted">You don't have access to any admin sections.</p>
+        )}
+
+        {activeTab !== null && (
+          <div id={`admin-panel-${activeTab}`} role="tabpanel" aria-labelledby={`admin-tab-${activeTab}`}>
+            {activeTab === "roles" ? <RolesTab /> : <UsersTab />}
+          </div>
+        )}
       </main>
     </div>
   );

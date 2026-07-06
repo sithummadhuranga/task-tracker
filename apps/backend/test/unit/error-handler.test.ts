@@ -48,6 +48,40 @@ describe("errorHandler", () => {
     });
   });
 
+  it("surfaces an http-errors-style exposable error under its own statusCode, e.g. body-parser's 413", () => {
+    const res = createMockResponse();
+    const payloadTooLarge = Object.assign(new Error("request entity too large"), {
+      statusCode: 413,
+      expose: true,
+    });
+
+    errorHandler(payloadTooLarge, req, res, next);
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({
+      statusCode: 413,
+      error: "Payload Too Large",
+      message: "request entity too large",
+    });
+  });
+
+  it("falls back to the raw message as 'error' for an exposable status code with no known reason phrase", () => {
+    const res = createMockResponse();
+    const teapot = Object.assign(new Error("short and stout"), {
+      statusCode: 418,
+      expose: true,
+    });
+
+    errorHandler(teapot, req, res, next);
+
+    expect(res.statusCode).toBe(418);
+    expect(res.body).toEqual({
+      statusCode: 418,
+      error: "short and stout",
+      message: "short and stout",
+    });
+  });
+
   it("masks unexpected errors behind a generic 500, never leaking internals", () => {
     const res = createMockResponse();
     const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);

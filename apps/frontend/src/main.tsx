@@ -5,9 +5,25 @@ import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { App } from "./App";
 import { AuthProvider } from "./features/auth/AuthContext";
+import { ApiError } from "./lib/apiClient";
 import "./index.css";
 
-const queryClient = new QueryClient();
+// The default retry (3 attempts, exponential backoff) is meant for transient/5xx failures.
+// Left at the default, a 403/404 — which is never transient, e.g. a permission that hasn't
+// taken effect yet — retries for several seconds before settling, which reads as a UI stuck
+// on its loading skeleton rather than a state that already resolved.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.statusCode >= 400 && error.statusCode < 500) {
+          return false;
+        }
+        return failureCount < 2;
+      },
+    },
+  },
+});
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
